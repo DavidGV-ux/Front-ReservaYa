@@ -13,6 +13,7 @@ import { OWNER_TENANT_KEY } from '../../../features/platform/pages/business-setu
 import { MOCK_APPOINTMENTS } from '../../../shared/mocks/dashboard.mock';
 import { MOCK_PROFESSIONALS, MOCK_SERVICES, MOCK_TENANT } from '../../../shared/mocks/tenant.mock';
 import { Appointment, LedgerEntry, Professional, Service, Tenant } from '../../../shared/models/domain.model';
+import { buildOwnerReport, OwnerReport } from '../../../shared/utils/owner-report';
 
 export interface OwnerOverview {
   tenant: Tenant;
@@ -138,6 +139,39 @@ export class DashboardService {
       );
   }
 
+  /**
+   * Reporte de ingresos/comisión del owner para un rango de fechas.
+   *
+   * TODO(I3): cuando el back exponga `GET /owner/:tenantId/reports?from=&to=` (contrato en
+   * shared/utils/owner-report.ts), reemplazar el respaldo por esa llamada. Mientras tanto se
+   * calcula con los últimos movimientos que devuelve `/overview`, por eso se marca `partial`.
+   */
+  ownerReport(tenantId: string, from: Date, to: Date): Observable<OwnerReport> {
+    if (environment.useMockBackend) {
+      return of(
+        buildOwnerReport({
+          movements: this.mockLedger(),
+          appointments: MOCK_APPOINTMENTS,
+          from,
+          to,
+          currency: MOCK_TENANT.currency,
+        }),
+      );
+    }
+    return this.ownerOverview(tenantId).pipe(
+      map((o) =>
+        buildOwnerReport({
+          movements: o.movements,
+          appointments: null,
+          from,
+          to,
+          currency: o.tenant.currency,
+          partial: true,
+        }),
+      ),
+    );
+  }
+
   ownerServices(tenantId: string): Observable<Service[]> {
     if (environment.useMockBackend) {
       return of(MOCK_SERVICES);
@@ -206,6 +240,41 @@ export class DashboardService {
       ]);
     }
     return this.api.get<AdminTenantRow[]>('/admin/tenants');
+  }
+
+  /** Asientos de ejemplo con la misma forma que genera payments-rules del back. */
+  private mockLedger(): LedgerEntry[] {
+    return MOCK_APPOINTMENTS.filter((a) => a.paymentStatus === 'approved').flatMap((a, i) => {
+      const gross = a.serviceSnapshot.price * (MOCK_TENANT.settings.upfrontPercent / 100);
+      const commission = Math.round(gross * a.commissionRateSnapshot * 100) / 100;
+      const common = {
+        tenantId: a.tenantId,
+        transactionId: `pay_${String(i).padStart(3, '0')}`,
+        appointmentId: a.id,
+        currency: MOCK_TENANT.currency,
+        commissionRateSnapshot: a.commissionRateSnapshot,
+        status: 'posted' as const,
+        timestamp: a.startTime,
+      };
+      return [
+        {
+          ...common,
+          id: `led_${i}_in`,
+          type: 'payment_approved' as const,
+          account: 'tenant_balance' as const,
+          direction: 'credit' as const,
+          amount: Math.round((gross - commission) * 100) / 100,
+        },
+        {
+          ...common,
+          id: `led_${i}_fee`,
+          type: 'platform_commission' as const,
+          account: 'platform_revenue' as const,
+          direction: 'credit' as const,
+          amount: commission,
+        },
+      ];
+    });
   }
 
   private mockOverview(): OwnerOverview {

@@ -2,17 +2,31 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
 import { BookingService } from '../../../../features/public-portal/services/booking.service';
 import { TenantService } from '../../../../features/public-portal/services/tenant.service';
+import {
+  CancelAppointmentDialog,
+  CancelAppointmentDialogData,
+} from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { estimateCancellation, isCancellable } from '../../../../shared/utils/cancellation-policy';
 
 @Component({
   selector: 'app-client-my-appointments',
-  imports: [MatCardModule, MatIconModule, MatButtonModule, MatSnackBarModule, TranslatePipe, MoneyPipe],
+  imports: [
+    MatCardModule,
+    MatIconModule,
+    MatButtonModule,
+    MatDialogModule,
+    MatSnackBarModule,
+    TranslatePipe,
+    MoneyPipe,
+  ],
   template: `
     <div class="appointments">
       <div class="appointments__head">
@@ -38,11 +52,26 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
               <span class="appointment__status" [class.appointment__status--cancelled]="appointment.status === 'cancelled'">
                 {{ 'history.status_' + appointment.status | translate }}
               </span>
+              @if (appointment.cancellation; as c) {
+                <p class="appointment__refund">
+                  {{ 'cancel.refund_' + c.refundStatus | translate: { amount: (c.refundAmount | appMoney: tenant()?.currency) } }}
+                </p>
+              }
             </div>
             <div class="appointment__side">
               <strong>{{ appointment.serviceSnapshot.price | appMoney: tenant()?.currency }}</strong>
               @if (canCancel(appointment)) {
-                <button mat-stroked-button color="warn" (click)="cancel(appointment)">{{ 'dashboard.cancel' | translate }}</button>
+                <button
+                  mat-stroked-button
+                  class="appointment__cancel"
+                  [attr.aria-label]="('dashboard.cancel' | translate) + ': ' + appointment.serviceSnapshot.name"
+                  (click)="cancel(appointment)"
+                >
+                  {{ 'dashboard.cancel' | translate }}
+                </button>
+                @if (isLate(appointment)) {
+                  <span class="appointment__late">{{ 'cancel.late_hint' | translate }}</span>
+                }
               }
             </div>
           </mat-card>
@@ -142,6 +171,23 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       gap: 10px;
     }
 
+    .appointment__refund {
+      margin: 6px 0 0;
+      font-size: 12px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .appointment__cancel {
+      color: var(--mat-sys-error);
+    }
+
+    .appointment__late {
+      max-width: 180px;
+      text-align: right;
+      font-size: 11px;
+      color: var(--mat-sys-error);
+    }
+
     .appointments__empty {
       padding: 40px;
       text-align: center;
@@ -156,6 +202,7 @@ export class ClientMyAppointmentsPage implements OnInit {
   private readonly tenants = inject(TenantService);
   private readonly snackbar = inject(MatSnackBar);
   private readonly translate = inject(TranslateService);
+  private readonly dialog = inject(MatDialog);
 
   protected readonly tenant = this.tenants.currentTenant;
   private readonly session = signal<Appointment[]>([]);
@@ -167,17 +214,34 @@ export class ClientMyAppointmentsPage implements OnInit {
   }
 
   protected canCancel(appointment: Appointment): boolean {
-    return (
-      appointment.status === 'confirmed' &&
-      new Date(appointment.startTime).getTime() - Date.now() > 24 * 60 * 60 * 1000
-    );
+    return isCancellable(appointment);
+  }
+
+  /** Fuera del plazo de la política: se puede cancelar, pero sin reembolso. */
+  protected isLate(appointment: Appointment): boolean {
+    return !estimateCancellation(appointment, this.tenant(), 'client').withinWindow;
   }
 
   protected cancel(appointment: Appointment): void {
-    this.booking.cancel(appointment, 'client').subscribe(() => this.reload(true));
+    const data: CancelAppointmentDialogData = { appointment, tenant: this.tenant(), by: 'client' };
+    this.dialog
+      .open<CancelAppointmentDialog, CancelAppointmentDialogData, Appointment>(CancelAppointmentDialog, {
+        data,
+        width: '480px',
+        autoFocus: 'dialog',
+      })
+      .afterClosed()
+      .subscribe((cancelled) => {
+        if (!cancelled) return;
+        this.session.update((list) => list.map((a) => (a.id === cancelled.id ? cancelled : a)));
+        this.snackbar.open(this.translate.instant('dashboard.cancelled_ok'), 'OK', {
+          duration: 4000,
+          panelClass: 'app-ok',
+        });
+      });
   }
 
-  private reload(notify = false): void {
+  private reload(): void {
     this.dashboard.roleContext('client').subscribe((membership) => {
       if (!membership) {
         this.session.set([]);
@@ -188,19 +252,10 @@ export class ClientMyAppointmentsPage implements OnInit {
         error: () => undefined,
       });
       this.dashboard.clientAppointments(membership.tenantId).subscribe({
-        next: (list) => this.applyList(list, notify),
-        error: () => this.applyList([], notify),
+        next: (list) => this.session.set(this.booking.withMockCancellations(list)),
+        error: () => this.session.set([]),
       });
     });
-  }
-
-  private applyList(list: Appointment[], notify: boolean): void {
-    this.session.set(list);
-    if (notify) {
-      void this.translate
-        .get('dashboard.cancelled_ok')
-        .subscribe((msg) => this.snackbar.open(msg, 'OK', { panelClass: 'app-ok' }));
-    }
   }
 
   protected date(iso: string): string {

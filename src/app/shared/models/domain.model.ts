@@ -108,12 +108,28 @@ export interface ClientInfo {
   habeasDataConsentAt?: string;
 }
 
+export type CancellationRequestedBy = 'client' | 'owner' | 'professional' | 'system';
+
+export type CancellationPolicy =
+  | 'client_within_window'
+  | 'client_outside_window'
+  | 'tenant_cancelled'
+  | 'no_show'
+  | 'system_cancelled';
+
+export type RefundStatus = 'not_applicable' | 'pending' | 'approved' | 'failed';
+
+/** Mismo contrato que `Cancellation` del back (domain/entities/appointment.ts). */
 export interface Cancellation {
-  by: 'client' | 'business' | 'professional';
+  requestedBy: CancellationRequestedBy;
+  requestedAt: string;
   reason?: string;
-  refundAmount?: number;
-  processingFee?: number;
-  at?: string;
+  policyApplied: CancellationPolicy;
+  processingFee: number;
+  refundAmount: number;
+  refundStatus: RefundStatus;
+  refundReference?: string;
+  resolvedAt?: string;
 }
 
 export interface Appointment {

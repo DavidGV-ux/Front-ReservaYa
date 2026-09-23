@@ -18,6 +18,10 @@ import {
   ClientInfo,
   Service,
 } from '../../../shared/models/domain.model';
+import { buildMockCancellation, estimateCancellation } from '../../../shared/utils/cancellation-policy';
+
+/** Quién cancela desde el front; el back solo expone rutas para cliente (público) y owner. */
+export type CancelActor = 'client' | 'owner';
 
 export interface BookingRequest {
   tenantId: string;
@@ -38,6 +42,15 @@ export class BookingService {
   private readonly counter = signal(0);
 
   readonly appointments = this.sessionAppointments.asReadonly();
+
+  /** Cancelaciones hechas en modo mock, para que se reflejen al volver a listar. */
+  private readonly mockCancelled = signal(new Map<string, Appointment>());
+
+  /** Aplica las cancelaciones mock sobre una lista de citas de prueba. */
+  withMockCancellations(list: Appointment[]): Appointment[] {
+    const cancelled = this.mockCancelled();
+    return cancelled.size ? list.map((a) => cancelled.get(a.id) ?? a) : list;
+  }
 
   private lastIntent: BookingIntent | null = null;
 
@@ -168,24 +181,37 @@ export class BookingService {
     return of(confirmed).pipe(delay(600));
   }
 
-  cancel(appointment: Appointment, by: 'client' | 'business' | 'professional'): Observable<Appointment> {
+  /**
+   * Cancela una cita. El cliente usa la ruta pública y el owner la suya
+   * (el back aplica reembolso completo cuando cancela el negocio).
+   */
+  cancel(appointment: Appointment, by: CancelActor, reason?: string): Observable<Appointment> {
+    const body = reason?.trim() ? { reason: reason.trim() } : {};
     if (!environment.useMockBackend) {
-      return this.api
-        .post<BackendAppointment>(`/public/${appointment.tenantId}/appointments/${appointment.id}/cancel`, {})
-        .pipe(map(mapAppointment));
+      const request =
+        by === 'owner'
+          ? this.api.post<BackendAppointment>(
+              `/owner/${appointment.tenantId}/appointments/${appointment.id}/cancel`,
+              body,
+              appointment.tenantId,
+            )
+          : this.api.post<BackendAppointment>(
+              `/public/${appointment.tenantId}/appointments/${appointment.id}/cancel`,
+              body,
+            );
+      return request.pipe(map(mapAppointment));
     }
 
-    const notified = this.sessionAppointments().some((a) => a.id === appointment.id);
+    const estimate = estimateCancellation(appointment, this.tenants.currentTenant() ?? MOCK_TENANT, by);
     const cancelled: Appointment = {
       ...appointment,
       status: 'cancelled',
-      cancellation: {
-        by,
-        refundAmount: 0,
-        processingFee: 0,
-        at: new Date().toISOString(),
-      },
+      paymentStatus: estimate.refundAmount > 0 ? 'pending' : appointment.paymentStatus,
+      cancellation: buildMockCancellation(estimate, by, body.reason),
     };
+    this.mockCancelled.update((m) => new Map(m).set(appointment.id, cancelled));
+
+    const notified = this.sessionAppointments().some((a) => a.id === appointment.id);
     if (notified) {
       this.availability.release(
         appointment.professionalId,
@@ -209,7 +235,7 @@ export class BookingService {
         .pipe(map((list) => list.map(mapAppointment)));
     }
 
-    const all = [...this.sessionAppointments(), ...MOCK_APPOINTMENTS];
+    const all = this.withMockCancellations([...this.sessionAppointments(), ...MOCK_APPOINTMENTS]);
     const filtered = clientPhone
       ? all.filter((a) => a.clientInfo.phone === clientPhone)
       : all;

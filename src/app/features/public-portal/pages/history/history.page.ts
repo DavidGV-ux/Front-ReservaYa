@@ -2,16 +2,31 @@ import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@ang
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { BookingService } from '../../services/booking.service';
 import { TenantService } from '../../services/tenant.service';
 import { PortalDataService } from '../../services/portal-data.service';
+import {
+  CancelAppointmentDialog,
+  CancelAppointmentDialogData,
+} from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { isCancellable } from '../../../../shared/utils/cancellation-policy';
 
 @Component({
   selector: 'app-history-page',
-  imports: [MatButtonModule, MatCardModule, MatIconModule, TranslatePipe, MoneyPipe],
+  imports: [
+    MatButtonModule,
+    MatCardModule,
+    MatIconModule,
+    MatDialogModule,
+    MatSnackBarModule,
+    TranslatePipe,
+    MoneyPipe,
+  ],
   template: `
     <div class="history">
       <div class="history__head">
@@ -45,6 +60,21 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
                 {{ 'history.status_' + appointment.status | translate }}
               </span>
               <strong>{{ appointment.serviceSnapshot.price | appMoney: tenant()?.currency }}</strong>
+              @if (appointment.cancellation; as c) {
+                <span class="history__refund">
+                  {{ 'cancel.refund_' + c.refundStatus | translate: { amount: (c.refundAmount | appMoney: tenant()?.currency) } }}
+                </span>
+              }
+              @if (canCancel(appointment)) {
+                <button
+                  mat-stroked-button
+                  class="history__cancel"
+                  [attr.aria-label]="('history.action_cancel' | translate) + ': ' + appointment.serviceSnapshot.name"
+                  (click)="cancel(appointment)"
+                >
+                  {{ 'history.action_cancel' | translate }}
+                </button>
+              }
             </div>
           </mat-card>
         } @empty {
@@ -142,6 +172,17 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       color: var(--mat-sys-on-error-container);
     }
 
+    .history__refund {
+      max-width: 200px;
+      text-align: right;
+      font-size: 12px;
+      color: var(--mat-sys-on-surface-variant);
+    }
+
+    .history__cancel {
+      color: var(--mat-sys-error);
+    }
+
     .history__empty {
       padding: 40px;
       text-align: center;
@@ -167,6 +208,8 @@ export class HistoryPage implements OnInit {
   private readonly booking = inject(BookingService);
   private readonly data = inject(PortalDataService);
   private readonly translate = inject(TranslateService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackbar = inject(MatSnackBar);
 
   protected readonly tenant = this.tenants.currentTenant;
   private readonly appts = signal<Appointment[]>([]);
@@ -179,6 +222,29 @@ export class HistoryPage implements OnInit {
     this.data.professionals(tenantId).subscribe((pros) => {
       this.professionals.set(new Map(pros.map((p) => [p.id, p.name])));
     });
+  }
+
+  protected canCancel(appointment: Appointment): boolean {
+    return isCancellable(appointment);
+  }
+
+  protected cancel(appointment: Appointment): void {
+    const data: CancelAppointmentDialogData = { appointment, tenant: this.tenant(), by: 'client' };
+    this.dialog
+      .open<CancelAppointmentDialog, CancelAppointmentDialogData, Appointment>(CancelAppointmentDialog, {
+        data,
+        width: '480px',
+        autoFocus: 'dialog',
+      })
+      .afterClosed()
+      .subscribe((cancelled) => {
+        if (!cancelled) return;
+        this.appts.update((list) => list.map((a) => (a.id === cancelled.id ? cancelled : a)));
+        this.snackbar.open(this.translate.instant('history.cancel_done'), 'OK', {
+          duration: 4000,
+          panelClass: 'app-ok',
+        });
+      });
   }
 
   protected professionalName(id: string): string {
