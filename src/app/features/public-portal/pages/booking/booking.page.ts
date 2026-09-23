@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, PLATFORM_ID, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { of, Observable } from 'rxjs';
 import {
   FormControl,
   FormGroup,
@@ -20,11 +22,24 @@ import { TenantService } from '../../services/tenant.service';
 import { PortalDataService } from '../../services/portal-data.service';
 import { AvailabilityService, SlotView } from '../../services/availability.service';
 import { BookingService } from '../../services/booking.service';
-import { Professional, Service } from '../../../../shared/models/domain.model';
+import { Appointment, Professional, Service } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { BookingIntent } from '../../../../core/http/api-mappers';
 
 interface SelectionEvent<T> {
   value: T;
+}
+
+interface WompiCheckoutParams {
+  currency: string;
+  amountInCents: number;
+  reference: string;
+  publicKey: string;
+  signature: { integrity: string };
+}
+
+interface WompiCheckoutResult {
+  transaction?: { status?: string };
 }
 
 @Component({
@@ -236,6 +251,11 @@ interface SelectionEvent<T> {
                 <br />
                 <em>{{ 'booking.payment_sandbox' | translate }}</em>
               </span>
+            </div>
+
+            <div class="payment__note">
+              <mat-icon>lock</mat-icon>
+              <span>{{ 'booking.widget_notice' | translate }}</span>
             </div>
 
             @if (paymentDone()) {
@@ -523,6 +543,9 @@ export class BookingPage implements OnInit {
     habeasData: new FormControl(false, { nonNullable: true, validators: [Validators.requiredTrue] }),
   });
 
+  private readonly platformId = inject(PLATFORM_ID);
+  private leftToConfirmation = false;
+
   protected readonly serviceDone = computed(
     () => this.selService() !== null && this.selProfessional() !== null,
   );
@@ -636,25 +659,104 @@ export class BookingPage implements OnInit {
       })
       .subscribe({
         next: (appointment) => {
-          this.booking.approvePayment(appointment).subscribe({
-            next: (confirmed) => {
-              this.paying.set(false);
-              this.payDone.set(true);
-              void this.router.navigate(['/', tenant.slug, 'confirmacion'], {
-                queryParams: { ref: confirmed.id },
-              });
-            },
-            error: () => {
-              this.paying.set(false);
-              this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
-            },
-          });
+          const intent = this.booking.paymentIntent();
+          if (intent?.chargeMode === 'hosted' && intent?.publicKey && intent?.signatureIntegrity) {
+            this.openCheckout(appointment, intent);
+          } else {
+            this.approveDemo(appointment);
+          }
         },
         error: () => {
           this.paying.set(false);
           this.slotConflict();
         },
       });
+  }
+
+  private approveDemo(appointment: Appointment): void {
+    this.booking.approvePayment(appointment).subscribe({
+      next: (confirmed) => {
+        this.paying.set(false);
+        this.payDone.set(true);
+        const tenant = this.tenant();
+        void this.router.navigate(['/', tenant?.slug, 'confirmacion'], {
+          queryParams: { ref: confirmed.id },
+        });
+      },
+      error: () => {
+        this.paying.set(false);
+        this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
+      },
+    });
+  }
+
+  private openCheckout(appointment: Appointment, intent: BookingIntent): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    const tenant = this.tenant();
+    const ref = appointment.id;
+
+    const payload: WompiCheckoutParams = {
+      currency: intent.currency,
+      amountInCents: intent.amountInCents ?? 0,
+      reference: intent.paymentReference,
+      publicKey: intent.publicKey ?? '',
+      signature: { integrity: intent.signatureIntegrity ?? '' },
+    };
+
+    this.ensureWompiCheckoutScript().subscribe({
+      next: () => {
+        const ctor = (
+          window as unknown as {
+            WidgetCheckout?: new (
+              params: WompiCheckoutParams,
+            ) => { open: (onResult: (result: WompiCheckoutResult) => void) => void };
+          }
+        ).WidgetCheckout;
+        if (!ctor) {
+          this.paying.set(false);
+          this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
+          return;
+        }
+        const widget = new ctor(payload);
+        this.paying.set(false);
+        widget.open((result) => this.onWidgetResult(result, tenant?.slug, ref));
+      },
+      error: () => {
+        this.paying.set(false);
+        this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
+      },
+    });
+  }
+
+  private onWidgetResult(result: WompiCheckoutResult, slug: string | undefined, ref: string): void {
+    const status = result.transaction?.status;
+    if (status === 'APPROVED' && !this.leftToConfirmation) {
+      this.leftToConfirmation = true;
+      this.payDone.set(true);
+      void this.router.navigate(['/', slug, 'confirmacion'], { queryParams: { ref } });
+    } else if (status) {
+      this.snackbar.open('booking.payment_failed_widget', 'OK', { panelClass: 'app-error' });
+    }
+  }
+
+  private ensureWompiCheckoutScript(): Observable<void> {
+    const w = window as unknown as { WidgetCheckout?: unknown };
+    if (w.WidgetCheckout) return of(undefined);
+    const existing = document.querySelector('script[data-wompi-checkout]');
+    if (existing) {
+      return of(undefined).pipe();
+    }
+    return new Observable<void>((subscriber) => {
+      const script = document.createElement('script');
+      script.src = 'https://checkout.wompi.co/widget.js';
+      script.setAttribute('data-wompi-checkout', '');
+      script.onload = () => {
+        subscriber.next();
+        subscriber.complete();
+      };
+      script.onerror = () => subscriber.error(new Error('wompi checkout failed to load'));
+      document.head.appendChild(script);
+    });
   }
 
   private applyService(service: Service): void {

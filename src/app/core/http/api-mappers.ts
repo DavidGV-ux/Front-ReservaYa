@@ -79,6 +79,10 @@ export interface BookingIntent {
   currency: Currency;
   paymentReference: string;
   providerTransactionId?: string;
+  chargeMode?: 'hosted' | 'demo';
+  publicKey?: string;
+  amountInCents?: number;
+  signatureIntegrity?: string;
 }
 
 export interface BookingResult {

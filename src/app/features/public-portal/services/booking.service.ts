@@ -4,6 +4,7 @@ import { environment } from '../../../core/config/environment';
 import { ApiService } from '../../../core/http/api.service';
 import {
   BackendAppointment,
+  BookingIntent,
   BookingResult,
   mapAppointment,
 } from '../../../core/http/api-mappers';
@@ -38,7 +39,11 @@ export class BookingService {
 
   readonly appointments = this.sessionAppointments.asReadonly();
 
-  private lastIntent: { advanceAmount: number; currency: string; paymentReference: string } | null = null;
+  private lastIntent: BookingIntent | null = null;
+
+  paymentIntent(): BookingIntent | null {
+    return this.lastIntent;
+  }
 
   create(request: BookingRequest): Observable<Appointment> {
     if (!environment.useMockBackend) {
@@ -63,6 +68,10 @@ export class BookingService {
               currency: result.intent.currency,
               paymentReference:
                 result.intent.paymentReference ?? result.appointment.paymentReference ?? '',
+              chargeMode: result.intent.chargeMode,
+              publicKey: result.intent.publicKey,
+              amountInCents: result.intent.amountInCents,
+              signatureIntegrity: result.intent.signatureIntegrity,
             };
             return mapAppointment(result.appointment);
           }),

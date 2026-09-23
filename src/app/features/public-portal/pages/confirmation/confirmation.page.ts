@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, PLATFORM_ID, inject, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,9 +17,19 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
     <div class="confirmation">
       @if (appointment(); as appointment) {
         <mat-card class="confirmation__card">
-          <mat-icon class="confirmation__icon">check_circle</mat-icon>
-          <h1>{{ 'confirmation.title' | translate }}</h1>
-          <p class="confirmation__subtitle">{{ 'confirmation.subtitle' | translate }}</p>
+          <mat-icon class="confirmation__icon" [class.confirmation__icon--muted]="appointment.paymentStatus !== 'approved'">
+            {{ appointment.paymentStatus === 'approved' ? 'check_circle' : appointment.paymentStatus === 'pending' ? 'hourglass_top' : 'cancel' }}
+          </mat-icon>
+          @if (appointment.paymentStatus === 'approved') {
+            <h1>{{ 'confirmation.title' | translate }}</h1>
+            <p class="confirmation__subtitle">{{ 'confirmation.subtitle' | translate }}</p>
+          } @else if (appointment.paymentStatus === 'pending') {
+            <h1>{{ 'confirmation.title_pending' | translate }}</h1>
+            <p class="confirmation__subtitle">{{ 'confirmation.subtitle_pending' | translate }}</p>
+          } @else {
+            <h1>{{ 'confirmation.title_declined' | translate }}</h1>
+            <p class="confirmation__subtitle">{{ 'confirmation.subtitle_declined' | translate }}</p>
+          }
 
           <div class="confirmation__data">
             <div class="confirmation__row">
@@ -45,7 +56,7 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
           <div class="confirmation__note">
             <mat-icon>hourglass_top</mat-icon>
-            <span>{{ 'confirmation.payment_note' | translate }}</span>
+            <span>{{ noteKey(appointment) | translate }}</span>
           </div>
 
           <div class="confirmation__actions">
@@ -150,6 +161,9 @@ export class ConfirmationPage implements OnInit {
   private readonly booking = inject(BookingService);
   private readonly translate = inject(TranslateService);
 
+  private readonly platformId = inject(PLATFORM_ID);
+  private readonly destroyRef = inject(DestroyRef);
+  private pollAttempts = 0;
   protected readonly tenant = this.tenants.currentTenant;
   private readonly appointmentSignal = signal<Appointment | null>(null);
   protected readonly appointment = this.appointmentSignal.asReadonly();
@@ -169,7 +183,18 @@ export class ConfirmationPage implements OnInit {
 
   private fetch(tenantId: string, ref: string): void {
     this.booking.getById(tenantId, ref).subscribe({
-      next: (appointment) => this.appointmentSignal.set(appointment),
+      next: (appointment) => {
+        this.appointmentSignal.set(appointment);
+        if (
+          appointment.paymentStatus === 'pending' &&
+          isPlatformBrowser(this.platformId) &&
+          this.pollAttempts < 20
+        ) {
+          this.pollAttempts += 1;
+          const timer = setTimeout(() => this.fetch(tenantId, ref), 3000);
+          this.destroyRef.onDestroy(() => clearTimeout(timer));
+        }
+      },
       error: () => this.appointmentSignal.set(null),
     });
   }
@@ -178,6 +203,12 @@ export class ConfirmationPage implements OnInit {
     return new Intl.DateTimeFormat(this.currentLocale(), {
       dateStyle: 'full',
     }).format(new Date(iso));
+  }
+
+  protected noteKey(appointment: Appointment): string {
+    if (appointment.paymentStatus === 'rejected') return 'confirmation.payment_failed';
+    if (appointment.paymentStatus === 'pending') return 'confirmation.payment_note';
+    return 'confirmation.paid_note';
   }
 
   protected timeLabel(iso: string): string {
