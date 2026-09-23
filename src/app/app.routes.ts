@@ -57,7 +57,7 @@ export const routes: Routes = [
         path: 'owner/reports',
         canActivate: [requireRoles([USER_ROLES.OWNER])],
         loadComponent: () =>
-          import('./features/owner/pages/overview/overview.page').then((m) => m.OwnerOverviewPage),
+          import('./features/owner/pages/reports/reports.page').then((m) => m.OwnerReportsPage),
       },
       {
         path: 'professional',

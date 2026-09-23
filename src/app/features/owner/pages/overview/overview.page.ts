@@ -3,15 +3,36 @@ import { MatCardModule } from '@angular/material/card';
 import { MatTableModule } from '@angular/material/table';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
+import { BookingService } from '../../../public-portal/services/booking.service';
+import {
+  CancelAppointmentDialog,
+  CancelAppointmentDialogData,
+} from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
 import { MOCK_TENANT } from '../../../../shared/mocks/tenant.mock';
 import { Appointment, LedgerEntry, Tenant } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { isCancellable } from '../../../../shared/utils/cancellation-policy';
 
 @Component({
   selector: 'app-owner-overview',
-  imports: [MatCardModule, MatTableModule, MatIconModule, MatButtonModule, TranslatePipe, MoneyPipe],
+  imports: [
+    RouterLink,
+    MatCardModule,
+    MatTableModule,
+    MatIconModule,
+    MatButtonModule,
+    MatDialogModule,
+    MatSnackBarModule,
+    MatTooltipModule,
+    TranslatePipe,
+    MoneyPipe,
+  ],
   template: `
     <div class="overview">
       <div class="overview__head">
@@ -70,11 +91,32 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
             </ng-container>
             <ng-container matColumnDef="amount">
               <th mat-header-cell *matHeaderCellDef>{{ 'dashboard.amount' | translate }}</th>
-              <td mat-cell *matCellDef="let a">{{ a.serviceSnapshot.price | appMoney }}</td>
+              <td mat-cell *matCellDef="let a">{{ a.serviceSnapshot.price | appMoney: tenant().currency }}</td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>
+                <span class="cdk-visually-hidden">{{ 'dashboard.actions' | translate }}</span>
+              </th>
+              <td mat-cell *matCellDef="let a" class="panel__actions">
+                @if (canCancel(a)) {
+                  <button
+                    mat-icon-button
+                    class="panel__cancel"
+                    [matTooltip]="'cancel.title' | translate"
+                    [attr.aria-label]="('cancel.title' | translate) + ': ' + a.clientInfo.name"
+                    (click)="cancel(a)"
+                  >
+                    <mat-icon>event_busy</mat-icon>
+                  </button>
+                }
+              </td>
             </ng-container>
             <tr mat-header-row *matHeaderRowDef="cols"></tr>
             <tr mat-row *matRowDef="let row; columns: cols;"></tr>
           </table>
+          @if (upcoming().length === 0) {
+            <p class="panel__empty">{{ 'dashboard.no_upcoming' | translate }}</p>
+          }
         </mat-card>
 
         <mat-card class="panel">
@@ -199,6 +241,22 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       font-weight: 600;
     }
 
+    .panel__actions {
+      width: 48px;
+      text-align: right;
+    }
+
+    .panel__cancel {
+      color: var(--mat-sys-error);
+    }
+
+    .panel__empty {
+      margin: 16px 0 4px;
+      text-align: center;
+      color: var(--mat-sys-on-surface-variant);
+      font-size: 13px;
+    }
+
     .overview__note {
       margin-top: 16px;
       font-size: 12px;
@@ -210,8 +268,11 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 export class OwnerOverviewPage implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly dashboard = inject(DashboardService);
+  private readonly booking = inject(BookingService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackbar = inject(MatSnackBar);
 
-  protected readonly cols = ['client', 'service', 'when', 'amount'];
+  protected readonly cols = ['client', 'service', 'when', 'amount', 'actions'];
   protected readonly mCols = ['date', 'ref', 'credit'];
 
   private readonly tenantSignal = signal<Tenant>(MOCK_TENANT);
@@ -247,11 +308,36 @@ export class OwnerOverviewPage implements OnInit {
         this.confirmedTodaySignal.set(overview.confirmedToday);
         this.occupancySignal.set(overview.occupancy);
         this.commissionSignal.set(Math.round(overview.commission * 100) / 100);
-        this.upcomingSignal.set(overview.upcoming);
+        this.upcomingSignal.set(
+          this.booking.withMockCancellations(overview.upcoming).filter((a) => a.status !== 'cancelled'),
+        );
         this.movementsSignal.set(overview.movements);
         this.ownerSignal.set(overview.owner);
       });
     });
+  }
+
+  protected canCancel(appointment: Appointment): boolean {
+    return isCancellable(appointment);
+  }
+
+  protected cancel(appointment: Appointment): void {
+    const data: CancelAppointmentDialogData = { appointment, tenant: this.tenant(), by: 'owner' };
+    this.dialog
+      .open<CancelAppointmentDialog, CancelAppointmentDialogData, Appointment>(CancelAppointmentDialog, {
+        data,
+        width: '480px',
+        autoFocus: 'dialog',
+      })
+      .afterClosed()
+      .subscribe((cancelled) => {
+        if (!cancelled) return;
+        this.upcomingSignal.update((list) => list.filter((a) => a.id !== cancelled.id));
+        this.snackbar.open(this.translate.instant('dashboard.cancelled_ok'), 'OK', {
+          duration: 4000,
+          panelClass: 'app-ok',
+        });
+      });
   }
 
   protected compactDate(iso: string): string {

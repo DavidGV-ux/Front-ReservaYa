@@ -5,6 +5,7 @@ import {
   AllowedMethods,
   CachePolicy,
   Distribution,
+  OriginRequestPolicy,
   PriceClass,
   ResponseHeadersPolicy,
   S3OriginAccessControl,
@@ -108,6 +109,7 @@ export class ReserwayaFrontStack extends Stack {
         }),
         allowedMethods: AllowedMethods.ALLOW_ALL,
         cachePolicy: CachePolicy.CACHING_DISABLED,
+        originRequestPolicy: OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
         responseHeadersPolicy: noStorePolicy,
       },
       additionalBehaviors: {
