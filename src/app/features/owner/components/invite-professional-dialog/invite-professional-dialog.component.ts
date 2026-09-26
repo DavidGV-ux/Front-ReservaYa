@@ -9,7 +9,8 @@ import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/materia
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { TranslatePipe } from '@ngx-translate/core';
 import { PlatformService } from '../../../platform/services/platform.service';
-import { Service } from '../../../../shared/models/domain.model';
+import { Service, WeeklySchedule } from '../../../../shared/models/domain.model';
+import { WeeklyScheduleEditor } from '../weekly-schedule-editor/weekly-schedule-editor.component';
 
 export interface InviteProfessionalDialogData {
   tenantId: string;
@@ -28,6 +29,7 @@ export interface InviteProfessionalDialogData {
     MatProgressSpinnerModule,
     MatSnackBarModule,
     TranslatePipe,
+    WeeklyScheduleEditor,
   ],
   template: `
     <h2 mat-dialog-title>{{ 'owner.invite_title' | translate }}</h2>
@@ -58,13 +60,20 @@ export interface InviteProfessionalDialogData {
             }
           </mat-select>
         </mat-form-field>
+
+        <p class="invite__schedule-title">{{ 'owner.schedule_edit_title' | translate }}</p>
+        <app-weekly-schedule-editor
+          [schedule]="null"
+          (valueChange)="onScheduleValue($event)"
+          (validChange)="onScheduleValid($event)"
+        />
       </mat-dialog-content>
 
       <mat-dialog-actions align="end">
         <button mat-button mat-dialog-close type="button">
           {{ 'common.cancel' | translate }}
         </button>
-        <button mat-flat-button [disabled]="form.invalid || submitting()">
+        <button mat-flat-button [disabled]="form.invalid || scheduleInvalid() || submitting()">
           @if (submitting()) {
             <mat-spinner diameter="20" />
           } @else {
@@ -87,6 +96,10 @@ export interface InviteProfessionalDialogData {
       font-size: 13px;
       margin: 0 0 12px;
     }
+    .invite__schedule-title {
+      margin: 16px 0 0;
+      font-weight: 600;
+    }
     @media (max-width: 520px) {
       .invite {
         min-width: 0;
@@ -98,6 +111,7 @@ export interface InviteProfessionalDialogData {
 })
 export class InviteProfessionalDialog {
   protected readonly submitting = signal(false);
+  protected readonly scheduleInvalid = signal(false);
 
   protected readonly form = new FormGroup({
     name: new FormControl('', {
@@ -119,12 +133,22 @@ export class InviteProfessionalDialog {
   private readonly snackbar = inject(MatSnackBar);
   private readonly dialogRef = inject(MatDialogRef<InviteProfessionalDialog>);
 
+  private schedule: WeeklySchedule | null = null;
+
   protected activeServices(): Service[] {
     return this.data.services.filter((s) => s.active);
   }
 
+  protected onScheduleValue(value: WeeklySchedule): void {
+    this.schedule = value;
+  }
+
+  protected onScheduleValid(valid: boolean): void {
+    this.scheduleInvalid.set(!valid);
+  }
+
   submit(): void {
-    if (this.form.invalid) return;
+    if (this.form.invalid || this.scheduleInvalid()) return;
     const v = this.form.value;
     if (!v.name || !v.email || !v.serviceIds?.length) return;
 
@@ -135,6 +159,7 @@ export class InviteProfessionalDialog {
         email: v.email,
         title: v.title || undefined,
         serviceIds: v.serviceIds,
+        weeklySchedule: this.schedule ?? undefined,
       })
       .subscribe({
         next: () => {

@@ -5,7 +5,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
-import { MOCK_TENANT } from '../../../../shared/mocks/tenant.mock';
 import { Appointment, LedgerEntry, Tenant } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
@@ -16,7 +15,9 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
     <div class="overview">
       <div class="overview__head">
         <h1>{{ 'dashboard.owner_title' | translate }}</h1>
-        <p>{{ tenant().name }} · {{ planLabel(tenant().planId) }}</p>
+        @if (tenant(); as t) {
+          <p>{{ t.name }} · {{ planLabel(t.planId) }}</p>
+        }
       </div>
 
       <div class="overview__grid">
@@ -101,7 +102,7 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       </div>
 
       <p class="overview__note">
-        {{ 'dashboard.demo_user' | translate }}: {{ owner().keycloakUserId }} · {{ 'dashboard.session' | translate }}
+        {{ 'dashboard.demo_user' | translate }}: {{ owner()?.keycloakUserId }} · {{ 'dashboard.session' | translate }}
       </p>
     </div>
   `,
@@ -214,7 +215,7 @@ export class OwnerOverviewPage implements OnInit {
   protected readonly cols = ['client', 'service', 'when', 'amount'];
   protected readonly mCols = ['date', 'ref', 'credit'];
 
-  private readonly tenantSignal = signal<Tenant>(MOCK_TENANT);
+  private readonly tenantSignal = signal<Tenant | null>(null);
   private readonly revenueSignal = signal(0);
   private readonly totalSignal = signal(0);
   private readonly confirmedTodaySignal = signal(0);
@@ -222,10 +223,7 @@ export class OwnerOverviewPage implements OnInit {
   private readonly commissionSignal = signal(0);
   private readonly upcomingSignal = signal<Appointment[]>([]);
   private readonly movementsSignal = signal<LedgerEntry[]>([]);
-  private readonly ownerSignal = signal<{ keycloakUserId: string; role: string }>({
-    keycloakUserId: 'kc-owner-001',
-    role: 'owner',
-  });
+  private readonly ownerSignal = signal<{ keycloakUserId: string; role: string } | null>(null);
 
   protected readonly tenant = this.tenantSignal.asReadonly();
   protected readonly revenue = this.revenueSignal.asReadonly();
@@ -240,16 +238,22 @@ export class OwnerOverviewPage implements OnInit {
   ngOnInit(): void {
     this.dashboard.ownerContext().subscribe((membership) => {
       if (!membership) return;
-      this.dashboard.ownerOverview(membership.tenantId).subscribe((overview) => {
-        this.tenantSignal.set(overview.tenant);
-        this.revenueSignal.set(Math.round(overview.revenue * 100) / 100);
-        this.totalSignal.set(overview.totalAppointments);
-        this.confirmedTodaySignal.set(overview.confirmedToday);
-        this.occupancySignal.set(overview.occupancy);
-        this.commissionSignal.set(Math.round(overview.commission * 100) / 100);
-        this.upcomingSignal.set(overview.upcoming);
-        this.movementsSignal.set(overview.movements);
-        this.ownerSignal.set(overview.owner);
+      this.dashboard.ownerOverview(membership.tenantId).subscribe({
+        next: (overview) => {
+          this.tenantSignal.set(overview.tenant);
+          this.revenueSignal.set(Math.round(overview.revenue * 100) / 100);
+          this.totalSignal.set(overview.totalAppointments);
+          this.confirmedTodaySignal.set(overview.confirmedToday);
+          this.occupancySignal.set(overview.occupancy);
+          this.commissionSignal.set(Math.round(overview.commission * 100) / 100);
+          this.upcomingSignal.set(overview.upcoming);
+          this.movementsSignal.set(overview.movements);
+          this.ownerSignal.set(overview.owner);
+        },
+        error: () => {
+          this.upcomingSignal.set([]);
+          this.movementsSignal.set([]);
+        },
       });
     });
   }

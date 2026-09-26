@@ -41,6 +41,7 @@ export interface BackendClientInfo {
   name?: string;
   phone?: string;
   email?: string;
+  documentId?: string;
   habeasDataConsent?: boolean;
   habeasDataConsentAt?: string;
   habeasDataAcceptedAt?: string;
@@ -64,6 +65,7 @@ export interface BackendAppointment {
   source?: AppointmentSource;
   paymentReference?: string;
   latestPaymentTransactionId?: string;
+  createdAt?: string;
   clientInfo?: BackendClientInfo;
   startTime: string;
   endTime: string;
@@ -136,6 +138,7 @@ export function mapAppointment(a: BackendAppointment): Appointment {
     source: a.source ?? 'web',
     paymentReference: a.paymentReference,
     latestPaymentTransactionId: a.latestPaymentTransactionId,
+    createdAt: a.createdAt,
     clientInfo,
     startTime: a.startTime,
     endTime: a.endTime,
@@ -153,6 +156,7 @@ function mapClientInfo(c?: BackendClientInfo): ClientInfo {
     name: c?.name ?? '',
     phone: c?.phone,
     email: c?.email,
+    documentId: c?.documentId,
     habeasDataConsent: Boolean(c?.habeasDataConsent ?? acceptedAt),
     habeasDataConsentAt: acceptedAt,
   };
@@ -163,4 +167,5 @@ export interface TenantMembership {
   slug: string;
   name: string;
   role: string;
+  roles: string[];
 }

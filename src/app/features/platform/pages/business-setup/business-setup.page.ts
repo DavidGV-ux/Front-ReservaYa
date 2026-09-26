@@ -16,7 +16,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../../../core/auth/auth.service';
-import { PlatformService } from '../../services/platform.service';
+import { DashboardService } from '../../../dashboard/services/dashboard.service';
+import { PlatformService, TENANT_CATEGORIES, TenantCategoryId } from '../../services/platform.service';
 
 export const OWNER_TENANT_KEY = 'reserwaya.ownerTenant';
 
@@ -59,6 +60,15 @@ export const OWNER_TENANT_KEY = 'reserwaya.ownerTenant';
               <mat-form-field appearance="outline">
                 <mat-label>{{ 'onboarding.biz_name' | translate }}</mat-label>
                 <input matInput formControlName="name" (blur)="generateSlug()" />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>{{ 'onboarding.biz_category' | translate }}</mat-label>
+                <mat-select formControlName="category">
+                  @for (c of categories; track c.id) {
+                    <mat-option [value]="c.id">{{ c.labelKey | translate }}</mat-option>
+                  }
+                </mat-select>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
@@ -242,15 +252,18 @@ export const OWNER_TENANT_KEY = 'reserwaya.ownerTenant';
 export class BusinessSetupPage {
   protected readonly auth = inject(AuthService);
   private readonly platform = inject(PlatformService);
+  private readonly dashboard = inject(DashboardService);
   private readonly router = inject(Router);
   private readonly snackbar = inject(MatSnackBar);
 
   protected readonly submitting = signal(false);
+  protected readonly categories = TENANT_CATEGORIES;
 
   protected readonly form = new FormGroup({
     name: new FormControl('', {
       validators: [Validators.required, Validators.minLength(2)],
     }),
+    category: new FormControl<TenantCategoryId | null>(null),
     slug: new FormControl('', {
       validators: [Validators.required, Validators.pattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)],
     }),
@@ -289,6 +302,7 @@ export class BusinessSetupPage {
       .onboardTenant({
         slug: v.slug,
         name: v.name,
+        category: v.category ?? undefined,
         tagline: v.tagline || undefined,
         description: v.description || undefined,
         country: v.country || undefined,
@@ -299,6 +313,7 @@ export class BusinessSetupPage {
       .subscribe({
         next: (result) => {
           this.submitting.set(false);
+          this.dashboard.invalidateTenants();
           localStorage.setItem(OWNER_TENANT_KEY, result.tenant.tenantId);
           this.snackbar.open(result.confirmation.message, undefined, { duration: 4000 });
           void this.router.navigateByUrl(result.confirmation.nextStep ?? '/app/owner');

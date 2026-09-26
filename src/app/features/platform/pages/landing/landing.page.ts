@@ -1,12 +1,19 @@
-import { ChangeDetectionStrategy, Component, inject, OnInit, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { TranslatePipe } from '@ngx-translate/core';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { SeoService } from '../../../../core/seo/seo.service';
-import { PlatformService, PlatformTenant } from '../../services/platform.service';
+import {
+  PlatformService,
+  PlatformTenant,
+  TENANT_CATEGORIES,
+  TenantCategoryId,
+} from '../../services/platform.service';
 
 @Component({
   selector: 'app-landing-page',
@@ -16,6 +23,8 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
     MatIconModule,
     MatCardModule,
     MatProgressSpinnerModule,
+    MatFormFieldModule,
+    MatInputModule,
     TranslatePipe,
   ],
   template: `
@@ -78,15 +87,81 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
           <mat-spinner diameter="36" />
         </div>
       } @else {
+        <div class="directory-controls">
+          <mat-form-field appearance="outline" class="directory__search">
+            <mat-label>{{ 'landing.search_placeholder' | translate }}</mat-label>
+            <mat-icon matPrefix>search</mat-icon>
+            <input matInput #query [value]="search()" (input)="search.set(query.value)" />
+            @if (search()) {
+              <button matSuffix mat-icon-button (click)="clearSearch(query)">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </mat-form-field>
+
+          <div class="directory__chips">
+            <button
+              mat-stroked-button
+              class="chip"
+              [class.chip--on]="category() === null"
+              (click)="category.set(null)"
+            >
+              {{ 'landing.category_all' | translate }}
+            </button>
+            @for (c of categories; track c.id) {
+              <button
+                mat-stroked-button
+                class="chip"
+                [class.chip--on]="category() === c.id"
+                (click)="toggleCategory(c.id)"
+              >
+                <mat-icon>{{ c.icon }}</mat-icon>
+                {{ c.labelKey | translate }}
+              </button>
+            }
+          </div>
+
+          <div class="directory__chips">
+            <button
+              mat-stroked-button
+              class="chip"
+              [class.chip--on]="city() === null"
+              (click)="clearCity()"
+            >
+              <mat-icon>location_city</mat-icon>
+              {{ 'landing.city_all' | translate }}
+            </button>
+            @for (c of cities(); track c) {
+              <button
+                mat-stroked-button
+                class="chip"
+                [class.chip--on]="city() === c"
+                (click)="toggleCity(c)"
+              >
+                <mat-icon>place</mat-icon>
+                {{ c }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <p class="directory__count">
+          {{ filtered().length }} {{ 'landing.results_unit' | translate }}
+        </p>
+
         <div class="biz-grid">
-          @for (biz of directory(); track biz.slug) {
+          @for (biz of filtered(); track biz.slug) {
             <mat-card class="biz">
               <div class="biz__avatar">{{ biz.name.charAt(0) }}</div>
               <h3 class="biz__name">{{ biz.name }}</h3>
               <p class="biz__tagline">{{ biz.tagline }}</p>
               <div class="biz__meta">
+                <span class="biz__cat">
+                  <mat-icon>{{ categoryIcon(biz.category) }}</mat-icon>
+                  {{ categoryLabel(biz.category) }}
+                </span>
                 <span>
-                  <mat-icon>content_cut</mat-icon>
+                  <mat-icon>schedule</mat-icon>
                   {{ biz.servicesCount }} {{ 'landing.services_unit' | translate }}
                 </span>
                 <span>
@@ -99,7 +174,9 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
               </a>
             </mat-card>
           } @empty {
-            <p class="biz__empty">{{ 'landing.empty' | translate }}</p>
+            <p class="biz__empty">
+              {{ (search() || category() !== null || city() !== null ? 'landing.no_search_results' : 'landing.empty') | translate }}
+            </p>
           }
         </div>
       }
@@ -239,6 +316,45 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
       justify-content: center;
       padding: 32px;
     }
+
+    .directory-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .directory__search {
+      width: 100%;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .directory__chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+    }
+    .chip {
+      border-radius: 999px;
+      line-height: 32px;
+      font-size: 13px;
+    }
+    .chip mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+    }
+    .chip--on {
+      background: var(--mat-sys-primary);
+      color: var(--mat-sys-on-primary);
+    }
+    .directory__count {
+      text-align: center;
+      font-size: 13px;
+      color: var(--mat-sys-on-surface-variant);
+      margin: 0 0 20px;
+    }
+
     .biz-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -263,19 +379,29 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
     }
     .biz__name {
       margin: 4px 0 0;
+      overflow-wrap: anywhere;
     }
     .biz__tagline {
       color: var(--mat-sys-on-surface-variant);
       font-size: 13px;
       margin: 0;
       min-height: 36px;
+      overflow-wrap: anywhere;
     }
     .biz__meta {
       display: flex;
-      gap: 14px;
+      flex-wrap: wrap;
+      gap: 6px 14px;
       font-size: 13px;
       color: var(--mat-sys-on-surface-variant);
       margin-top: 4px;
+    }
+    .biz__cat {
+      flex: 1 1 100%;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .biz__meta span {
       display: inline-flex;
@@ -333,9 +459,18 @@ import { PlatformService, PlatformTenant } from '../../services/platform.service
 export class LandingPage implements OnInit {
   private readonly platform = inject(PlatformService);
   private readonly seo = inject(SeoService);
+  private readonly translate = inject(TranslateService);
 
   protected readonly loading = signal(true);
   protected readonly directory = signal<PlatformTenant[]>([]);
+  protected readonly search = signal('');
+  protected readonly category = signal<TenantCategoryId | null>(null);
+  protected readonly city = signal<string | null>(null);
+  protected readonly langTick = signal(0);
+  protected readonly categories = TENANT_CATEGORIES;
+  protected readonly cities = computed(() =>
+    [...new Set(this.directory().map((b) => b.city).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+  );
   protected readonly steps = [
     { index: '1', icon: 'storefront', title: 'landing.step1', text: 'landing.step1_text' },
     { index: '2', icon: 'group_add', title: 'landing.step2', text: 'landing.step2_text' },
@@ -350,12 +485,33 @@ export class LandingPage implements OnInit {
     });
   }
 
+  protected readonly filtered = computed(() => {
+    this.langTick();
+    const q = this.normalize(this.search().trim());
+    const cat = this.category();
+    const city = this.city();
+    return this.directory()
+      .filter((b) => (cat ? b.category === cat : true))
+      .filter((b) => (city ? b.city === city : true))
+      .map((b) => ({ biz: b, score: this.matchScore(b, q) }))
+      .filter((x) => x.score >= 0)
+      .sort(
+        (a, b) =>
+          a.score - b.score ||
+          b.biz.servicesCount +
+            b.biz.professionalsCount -
+            (a.biz.servicesCount + a.biz.professionalsCount),
+      )
+      .map((x) => x.biz);
+  });
+
   ngOnInit(): void {
     this.platform.directory().subscribe({
       next: (list) => this.directory.set(list),
       error: () => this.directory.set([]),
       complete: () => this.loading.set(false),
     });
+    this.translate.onLangChange.subscribe(() => this.langTick.update((v) => v + 1));
   }
 
   protected businesses(): number {
@@ -368,5 +524,48 @@ export class LandingPage implements OnInit {
 
   protected totalProfessionals(): number {
     return this.directory().reduce((acc, b) => acc + b.professionalsCount, 0);
+  }
+
+  protected categoryLabel(id: TenantCategoryId): string {
+    return this.translate.instant(`landing.category_${id}`);
+  }
+
+  protected categoryIcon(id: TenantCategoryId): string {
+    return TENANT_CATEGORIES.find((c) => c.id === id)?.icon ?? 'storefront';
+  }
+
+  protected toggleCategory(id: TenantCategoryId): void {
+    this.category.set(this.category() === id ? null : id);
+  }
+
+  protected toggleCity(city: string): void {
+    this.city.set(this.city() === city ? null : city);
+  }
+
+  protected clearCity(): void {
+    this.city.set(null);
+  }
+
+  protected clearSearch(input: HTMLInputElement): void {
+    input.value = '';
+    this.search.set('');
+  }
+
+  private matchScore(biz: PlatformTenant, q: string): number {
+    if (!q) return 0;
+    const name = this.normalize(biz.name);
+    const tagline = this.normalize(biz.tagline);
+    const label = this.normalize(this.categoryLabel(biz.category));
+    if (name.includes(q)) return 0;
+    if (tagline.includes(q)) return 1;
+    if (label.includes(q)) return 2;
+    return -1;
+  }
+
+  private normalize(text: string): string {
+    return text
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
   }
 }

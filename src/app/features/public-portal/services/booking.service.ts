@@ -56,6 +56,7 @@ export class BookingService {
             name: request.clientInfo.name,
             phone: request.clientInfo.phone,
             email: request.clientInfo.email,
+            documentId: request.clientInfo.documentId,
             habeasDataConsent: true,
             habeasDataConsentAt: new Date().toISOString(),
           },
@@ -123,10 +124,13 @@ export class BookingService {
     return of(appointment).pipe(delay(400));
   }
 
-  approvePayment(appointment: Appointment): Observable<Appointment> {
+  approvePayment(
+    appointment: Appointment,
+    overrides?: { reference?: string; amount?: number; currency?: string },
+  ): Observable<Appointment> {
     if (!environment.useMockBackend) {
       const intent = this.lastIntent;
-      const reference = appointment.paymentReference ?? intent?.paymentReference;
+      const reference = overrides?.reference ?? appointment.paymentReference ?? intent?.paymentReference;
       if (!reference || !intent) {
         return throwError(() => new Error('no payment intent available'));
       }
@@ -135,8 +139,8 @@ export class BookingService {
           '/webhooks/demo/payments/approve',
           {
             reference,
-            amount: intent.advanceAmount,
-            currency: intent.currency,
+            amount: overrides?.amount ?? intent.advanceAmount,
+            currency: overrides?.currency ?? intent.currency,
             tenantId: appointment.tenantId,
           },
         )
@@ -199,13 +203,16 @@ export class BookingService {
     return of(cancelled).pipe(delay(200));
   }
 
-  history(clientPhone?: string): Observable<Appointment[]> {
+  history(clientPhone?: string, clientDocument?: string): Observable<Appointment[]> {
     if (!environment.useMockBackend) {
       const tenantId = this.tenants.currentTenant()?.tenantId;
       if (!tenantId) return of([]);
-      const qs = clientPhone ? `?phone=${encodeURIComponent(clientPhone)}` : '';
+      const params = new URLSearchParams();
+      if (clientPhone) params.set('phone', clientPhone);
+      if (clientDocument) params.set('documentId', clientDocument);
+      const qs = params.toString();
       return this.api
-        .get<BackendAppointment[]>(`/public/${tenantId}/appointments/history${qs}`)
+        .get<BackendAppointment[]>(`/public/${tenantId}/appointments/history${qs ? `?${qs}` : ''}`)
         .pipe(map((list) => list.map(mapAppointment)));
     }
 

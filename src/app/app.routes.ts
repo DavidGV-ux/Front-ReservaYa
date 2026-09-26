@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { requireRoles } from './core/auth/auth.guards';
+import { requireRoles, requireAuth } from './core/auth/auth.guards';
 import { USER_ROLES } from './core/auth/roles';
 import { PublicLayout } from './layouts/public-layout/public-layout.component';
 import { DashboardLayout } from './layouts/dashboard-layout/dashboard-layout.component';
@@ -23,6 +23,13 @@ export const routes: Routes = [
             (m) => m.BusinessSetupPage,
           ),
       },
+      {
+        path: 'privacidad',
+        loadComponent: () =>
+          import('./features/platform/pages/privacy-policy/privacy-policy.page').then(
+            (m) => m.PrivacyPolicyPage,
+          ),
+      },
     ],
   },
   {
@@ -34,7 +41,12 @@ export const routes: Routes = [
     path: 'app',
     component: DashboardLayout,
     children: [
-      { path: '', pathMatch: 'full', redirectTo: 'owner' },
+      {
+        path: '',
+        pathMatch: 'full',
+        loadComponent: () =>
+          import('./features/platform/pages/app-landing/app-landing.page').then((m) => m.AppLandingPage),
+      },
       {
         path: 'owner',
         canActivate: [requireRoles([USER_ROLES.OWNER])],
@@ -54,6 +66,18 @@ export const routes: Routes = [
           import('./features/owner/pages/professionals/professionals.page').then((m) => m.OwnerProfessionalsPage),
       },
       {
+        path: 'owner/citas',
+        canActivate: [requireRoles([USER_ROLES.OWNER])],
+        loadComponent: () =>
+          import('./features/owner/pages/appointments/appointments.page').then((m) => m.OwnerAppointmentsPage),
+      },
+      {
+        path: 'owner/pagos',
+        canActivate: [requireRoles([USER_ROLES.OWNER])],
+        loadComponent: () =>
+          import('./features/owner/pages/payments/payments.page').then((m) => m.OwnerPaymentsPage),
+      },
+      {
         path: 'owner/reports',
         canActivate: [requireRoles([USER_ROLES.OWNER])],
         loadComponent: () =>
@@ -67,10 +91,18 @@ export const routes: Routes = [
       },
       {
         path: 'client',
-        canActivate: [requireRoles([USER_ROLES.CLIENT, USER_ROLES.OWNER])],
+        canActivate: [requireAuth()],
         loadComponent: () =>
           import('./features/client/pages/my-appointments/my-appointments.page').then(
             (m) => m.ClientMyAppointmentsPage,
+          ),
+      },
+      {
+        path: 'reservas',
+        canActivate: [requireRoles([USER_ROLES.CLIENT, USER_ROLES.PROFESSIONAL, USER_ROLES.OWNER, USER_ROLES.ADMIN])],
+        loadComponent: () =>
+          import('./features/client/pages/my-reservations/my-reservations.page').then(
+            (m) => m.ClientMyReservationsPage,
           ),
       },
       {
@@ -80,6 +112,11 @@ export const routes: Routes = [
           import('./features/admin/pages/tenants/tenants.page').then((m) => m.AdminTenantsPage),
       },
     ],
+  },
+  {
+    path: 'pagar/:tenantId/:appointmentId',
+    loadComponent: () =>
+      import('./features/public-portal/pages/pay/pay.page').then((m) => m.PayPage),
   },
   {
     path: ':tenantSlug',
@@ -110,7 +147,6 @@ export const routes: Routes = [
       },
       {
         path: 'mi-historial',
-        canActivate: [requireRoles([USER_ROLES.CLIENT, USER_ROLES.OWNER])],
         loadComponent: () =>
           import('./features/public-portal/pages/history/history.page').then((m) => m.HistoryPage),
       },

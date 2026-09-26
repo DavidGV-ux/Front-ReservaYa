@@ -1,14 +1,17 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { afterNextRender, ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog } from '@angular/material/dialog';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LocaleSwitcher } from '../../shared/components/locale-switcher/locale-switcher.component';
 import { AuthService } from '../../core/auth/auth.service';
 import { USER_ROLES } from '../../core/auth/roles';
+import { PlatformService } from '../../features/platform/services/platform.service';
+import { CompleteProfileDialog } from '../../features/platform/components/complete-profile-dialog/complete-profile-dialog.component';
 
 @Component({
   selector: 'app-platform-layout',
@@ -38,8 +41,11 @@ import { USER_ROLES } from '../../core/auth/roles';
             {{ 'landing.cta_own_business' | translate }}
           </a>
           @if (auth.isAuthenticated()) {
-            <a mat-flat-button routerLink="/app" (click)="snav.close()">
-              {{ 'landing.go_dashboard' | translate }}
+            <a mat-flat-button routerLink="/app/owner" (click)="snav.close()">
+              {{ 'landing.go_owner_dashboard' | translate }}
+            </a>
+            <a mat-stroked-button routerLink="/app/client" (click)="snav.close()">
+              {{ 'landing.go_client_dashboard' | translate }}
             </a>
           } @else {
             <button mat-stroked-button (click)="login(); snav.close()">
@@ -88,9 +94,13 @@ import { USER_ROLES } from '../../core/auth/roles';
             <div class="platform__actions">
               <app-locale-switcher />
               @if (auth.isAuthenticated()) {
-                <button mat-flat-button routerLink="/app" class="platform__cta" (click)="goDashboard()">
-                  <mat-icon>space_dashboard</mat-icon>
-                  <span>{{ 'landing.go_dashboard' | translate }}</span>
+                <button mat-flat-button routerLink="/app/owner" class="platform__cta" (click)="goDashboard()">
+                  <mat-icon>storefront</mat-icon>
+                  <span>{{ 'landing.go_owner_dashboard' | translate }}</span>
+                </button>
+                <button mat-stroked-button routerLink="/app/client" class="platform__cta" (click)="goDashboard()">
+                  <mat-icon>person</mat-icon>
+                  <span>{{ 'landing.go_client_dashboard' | translate }}</span>
                 </button>
               } @else {
                 <button mat-flat-button class="platform__cta" (click)="login()">
@@ -116,8 +126,9 @@ import { USER_ROLES } from '../../core/auth/roles';
             </div>
             <div class="platform__footer-meta">
               <span>{{ 'footer.rights' | translate }}</span>
-              <a>{{ 'footer.privacy' | translate }}</a>
-              <a>{{ 'footer.habeas' | translate }}</a>
+              <a class="platform__footer-link" routerLink="/privacidad">
+                {{ 'common.appName' | translate }} — {{ 'footer.privacy_full' | translate }}
+              </a>
             </div>
           </div>
         </footer>
@@ -235,6 +246,13 @@ import { USER_ROLES } from '../../core/auth/roles';
       font-size: 13px;
       align-items: flex-end;
     }
+    .platform__footer-link {
+      color: var(--mat-sys-primary);
+      text-decoration: none;
+    }
+    .platform__footer-link:hover {
+      text-decoration: underline;
+    }
 
     @media (max-width: 860px) {
       .platform__menu {
@@ -256,6 +274,34 @@ import { USER_ROLES } from '../../core/auth/roles';
 export class PlatformLayout {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  private readonly platform = inject(PlatformService);
+  private profileChecked = false;
+
+  constructor() {
+    // Solo se ejecuta en el navegador (no en SSR) y tras el hidratado.
+    afterNextRender(() => {
+      if (this.profileChecked) return;
+      this.profileChecked = true;
+      void this.auth.ready.then(() => {
+        if (this.auth.isAuthenticated()) this.checkProfile();
+      });
+    });
+  }
+
+  private checkProfile(): void {
+    this.platform.meProfile().subscribe({
+      next: (profile) => {
+        // Tras el registro pedimos teléfono + ciudad (habilita el WhatsApp de ReservaYa).
+        if (!profile?.phone || !profile?.city) {
+          this.dialog.open(CompleteProfileDialog, { width: '460px', maxWidth: '92vw' });
+        }
+      },
+      error: () => {
+        // Si el perfil no es consultable (sesión caducada), no bloqueamos la navegación.
+      },
+    });
+  }
 
   protected login(): void {
     void this.auth.login().subscribe((ok) => {

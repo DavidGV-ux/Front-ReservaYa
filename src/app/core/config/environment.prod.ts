@@ -2,6 +2,7 @@ export const environment = {
   production: true,
   useMockBackend: false,
   apiBaseUrl: '/api',
+  appVersion: '2026-09-25-2',
   keycloak: {
     issuer: 'https://d5mklesn5mbc7.cloudfront.net/realms/reserwaya',
     clientId: 'reserwaya-web',

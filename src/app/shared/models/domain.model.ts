@@ -58,10 +58,20 @@ export interface Professional {
   title?: string;
   avatarUrl?: string;
   serviceIds: string[];
+  schedule?: WeeklySchedule;
   active: boolean;
   keycloakUserId?: string;
   version: number;
 }
+
+export interface WorkInterval {
+  start: string;
+  end: string;
+}
+
+export type WeekDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export type WeeklySchedule = Record<WeekDay, WorkInterval[]>;
 
 export interface DailySchedule {
   dayOfWeek: number;
@@ -104,6 +114,7 @@ export interface ClientInfo {
   name: string;
   phone?: string;
   email?: string;
+  documentId?: string;
   habeasDataConsent: boolean;
   habeasDataConsentAt?: string;
 }
@@ -128,6 +139,7 @@ export interface Appointment {
   source: AppointmentSource;
   paymentReference?: string;
   latestPaymentTransactionId?: string;
+  createdAt?: string;
   clientInfo: ClientInfo;
   startTime: string;
   endTime: string;

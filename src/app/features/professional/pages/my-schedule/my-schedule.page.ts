@@ -6,7 +6,6 @@ import { MatListModule } from '@angular/material/list';
 import { MatButtonModule } from '@angular/material/button';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
-import { MOCK_PROFESSIONALS } from '../../../../shared/mocks/tenant.mock';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
@@ -25,10 +24,20 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
     <div class="schedule">
       <div class="schedule__head">
         <h1>{{ 'dashboard.schedule' | translate }}</h1>
-        <p>{{ self().name }} · {{ self().title }}</p>
+        @if (businessName(); as name) {
+          <p>{{ name }}</p>
+        }
       </div>
 
-      <div class="schedule__days">
+      @if (notProfessional()) {
+        <mat-card class="schedule__panel">
+          <div class="schedule__empty-state">
+            <mat-icon>work_off</mat-icon>
+            <p>{{ 'dashboard.not_professional_here' | translate }}</p>
+          </div>
+        </mat-card>
+      } @else {
+        <div class="schedule__days">
         @for (day of days(); track day.getTime()) {
           <button
             mat-stroked-button
@@ -40,41 +49,42 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
             <span class="schedule__day-date">{{ dayNumber(day) }}</span>
           </button>
         }
-      </div>
+        </div>
 
-      <mat-card class="schedule__panel">
-        <mat-list>
-          @for (appointment of dayAppointments(); track appointment.id) {
-            <mat-list-item class="schedule__item">
-              <mat-icon matListItemIcon>event</mat-icon>
-              <span matListItemTitle>{{ time(appointment.startTime) }} – {{ time(appointment.endTime) }}</span>
-              <span matListItemLine>
-                {{ appointment.clientInfo.name }} · {{ appointment.serviceSnapshot.name }}
-                · {{ appointment.serviceSnapshot.price | appMoney }}
-              </span>
-              <span matListItemMeta>
-                <button mat-stroked-button (click)="toggleStatus(appointment)">
-                  {{ appointment.status === 'completed' ? 'Completed' : 'Done' }}
-                </button>
-              </span>
-            </mat-list-item>
-          } @empty {
-            <mat-list-item class="schedule__empty">
-              <span matListItemTitle>{{ 'dashboard.empty_day' | translate }}</span>
-            </mat-list-item>
-          }
-        </mat-list>
-      </mat-card>
+        <mat-card class="schedule__panel">
+          <mat-list>
+            @for (appointment of dayAppointments(); track appointment.id) {
+              <mat-list-item class="schedule__item">
+                <mat-icon matListItemIcon>event</mat-icon>
+                <span matListItemTitle>{{ time(appointment.startTime) }} – {{ time(appointment.endTime) }}</span>
+                <span matListItemLine>
+                  {{ appointment.clientInfo.name }} · {{ appointment.serviceSnapshot.name }}
+                  · {{ appointment.serviceSnapshot.price | appMoney }}
+                </span>
+                <span matListItemMeta>
+                  <button mat-stroked-button (click)="toggleStatus(appointment)">
+                    {{ appointment.status === 'completed' ? 'Completed' : 'Done' }}
+                  </button>
+                </span>
+              </mat-list-item>
+            } @empty {
+              <mat-list-item class="schedule__empty">
+                <span matListItemTitle>{{ 'dashboard.empty_day' | translate }}</span>
+              </mat-list-item>
+            }
+          </mat-list>
+        </mat-card>
 
-      <div class="schedule__actions">
-        <mat-chip-set>
-          <mat-chip>
-            <mat-icon chipIcon>toggle_on</mat-icon>
-            {{ 'dashboard.available' | translate }}
-          </mat-chip>
-        </mat-chip-set>
-        <button mat-stroked-button>{{ 'dashboard.configure_availability' | translate }}</button>
-      </div>
+        <div class="schedule__actions">
+          <mat-chip-set>
+            <mat-chip>
+              <mat-icon chipIcon>toggle_on</mat-icon>
+              {{ 'dashboard.available' | translate }}
+            </mat-chip>
+          </mat-chip-set>
+          <button mat-stroked-button>{{ 'dashboard.configure_availability' | translate }}</button>
+        </div>
+      }
     </div>
   `,
   styles: `
@@ -130,6 +140,22 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       color: var(--mat-sys-on-surface-variant);
     }
 
+    .schedule__empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 48px 20px;
+      color: var(--mat-sys-on-surface-variant);
+      text-align: center;
+
+      mat-icon {
+        font-size: 48px;
+        width: 48px;
+        height: 48px;
+      }
+    }
+
     .schedule__actions {
       display: flex;
       justify-content: space-between;
@@ -143,12 +169,15 @@ export class MySchedulePage implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly dashboard = inject(DashboardService);
 
-  protected readonly self = signal(MOCK_PROFESSIONALS[0]);
+  private readonly business = signal<string | null>(null);
+  private readonly notProfessionalFlag = signal(false);
   private readonly tenantContext = signal<string | null>(null);
   private readonly daysList = signal<Date[]>([]);
   private readonly selected = signal<Date | null>(null);
   private readonly dayAppts = signal<Appointment[]>([]);
 
+  protected readonly businessName = this.business.asReadonly();
+  protected readonly notProfessional = this.notProfessionalFlag.asReadonly();
   protected readonly days = this.daysList.asReadonly();
   protected readonly selectedDay = this.selected.asReadonly();
   protected readonly dayAppointments = this.dayAppts.asReadonly();
@@ -156,23 +185,25 @@ export class MySchedulePage implements OnInit {
   ngOnInit(): void {
     this.dashboard.roleContext('professional').subscribe((membership) => {
       this.tenantContext.set(membership?.tenantId ?? null);
-      if (membership?.name) {
-        this.self.set({ ...this.self(), name: membership.name });
+      this.business.set(membership?.name ?? null);
+      if (!membership) {
+        this.notProfessionalFlag.set(true);
+        return;
       }
+      this.notProfessionalFlag.set(false);
+      const days: Date[] = [];
+      const now = new Date();
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() + i);
+        d.setHours(0, 0, 0, 0);
+        days.push(d);
+      }
+      this.daysList.set(days);
+      const today = days.find((d) => d.getDate() === now.getDate()) ?? days[0];
+      this.selected.set(today);
+      this.reload(today);
     });
-
-    const days: Date[] = [];
-    const now = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      d.setHours(0, 0, 0, 0);
-      days.push(d);
-    }
-    this.daysList.set(days);
-    const today = days.find((d) => d.getDate() === now.getDate()) ?? days[0];
-    this.selected.set(today);
-    this.reload(today);
   }
 
   selectDay(day: Date): void {
@@ -187,12 +218,18 @@ export class MySchedulePage implements OnInit {
     this.dayAppts.set([]);
     this.dashboard
       .professionalAgenda(this.tenantContext() ?? '', start, end.toISOString())
-      .subscribe((agenda) => {
-        this.dayAppts.set(
-          agenda.appointments
-            .filter((a) => a.startTime >= start && a.startTime < end.toISOString())
-            .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-        );
+      .subscribe({
+        next: (agenda) => {
+          this.dayAppts.set(
+            agenda.appointments
+              .filter((a) => a.startTime >= start && a.startTime < end.toISOString())
+              .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+          );
+        },
+        error: () => {
+          this.notProfessionalFlag.set(true);
+          this.dayAppts.set([]);
+        },
       });
   }
 

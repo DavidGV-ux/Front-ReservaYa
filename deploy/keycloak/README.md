@@ -45,6 +45,40 @@ Credenciales en `deploy/keycloak/secrets.env` (**gitignored**):
 Para regenerar toda la configuración del realm en otro Keycloak:
 `./configure-realm.sh https://<keycloak-cf> https://<front-cf>`.
 
+## Tema de login "reservaya"
+
+El login, registro, recuperación de contraseña, OTP y consentimiento usan un
+tema de marca propio (`deploy/keycloak/themes/reservaya/`), construido sobre
+**Bootstrap 5** y **SweetAlert2** (assets versionados en el tema, sin CDN):
+
+- `login/theme.properties` → `parent=keycloak`, mapea las clases `kc*Class` de
+  los formularios base a clases Bootstrap (`form-control`, `form-label`,
+  `input-group`, `btn btn-primary`, `w-100`, `mb-3`, …). Importante: **no usar
+  `parent=keycloak.v2`**: en Keycloak 26 ese base renderiza formularios con
+  PatternFly y **ignora el mapeo** `kc*Class`.
+- `login/template.ftl` → shell del login (logo, selector de idioma, enlace
+  "Volver al sitio"), carga Bootstrap + `js/sweetalert2.min.js` +
+  `js/theme.js`; mantiene el contrato de secciones `header` / `form` / `info` /
+  `socialProviders` de las plantillas base.
+- `login/resources/` → `css/bootstrap.min.css`, `css/reservaya.css` (marca
+  verde sobre Bootstrap), `img/favicon.svg`, `js/passwordVisibility.js` (de la
+  base 26.7.3), `js/sweetalert2.min.js` y `js/theme.js`.
+- `js/theme.js` → convierte los mensajes de Keycloak en popups de SweetAlert2
+  (icono según `success|error|warning|info`); sin JS queda una alerta inline.
+- `login/messages/` → claves custom ES/EN (`reservaya.backToSite`, títulos de
+  los popups `reservaya.title.*`).
+
+Configuración del realm aplicada por `configure-realm.sh` (importante: la
+carpeta `themes` debe estar montada en `/opt/keycloak/themes` del contenedor;
+es un bind-mount `:ro` del `docker-compose.yml`):
+
+- `loginTheme=reservaya`.
+- `displayName=ReservaYa`.
+- `internationalizationEnabled=true`, `defaultLocale=es`, `supportedLocales=[en,es]`
+  (el selector de idioma aparece en el login).
+- Protección *brute force* activada (umbrella de la password policy del SPA;
+  el back nunca recibe ni guarda contraseñas, ver ADR-1).
+
 ## Costo y free tier
 
 - `t3.micro` 750 h/mes: incluido en el Free Tier de AWS (primeros 12 meses) y
