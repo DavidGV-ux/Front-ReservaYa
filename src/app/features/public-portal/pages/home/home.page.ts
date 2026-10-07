@@ -5,7 +5,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { TranslatePipe } from '@ngx-translate/core';
 import { SeoService } from '../../../../core/seo/seo.service';
-import { TenantService } from '../../services/tenant.service';
+import { TenantService, tenantSlugFromSnapshot } from '../../services/tenant.service';
 import { PortalDataService } from '../../services/portal-data.service';
 import { Professional, Service } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
@@ -376,7 +376,8 @@ export class HomePage implements OnInit {
   });
 
   ngOnInit(): void {
-    const slug = this.route.snapshot.paramMap.get('tenantSlug') ?? 'barber-estilo';
+    const slug = tenantSlugFromSnapshot(this.route.snapshot);
+    if (!slug) return;
     this.tenants.resolve(slug).subscribe((tenant) => {
       this.seo.setPageMeta({
         title: `${tenant.name} · Reserva tu cita en línea`,

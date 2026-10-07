@@ -58,10 +58,20 @@ export interface Professional {
   title?: string;
   avatarUrl?: string;
   serviceIds: string[];
+  schedule?: WeeklySchedule;
   active: boolean;
   keycloakUserId?: string;
   version: number;
 }
+
+export interface WorkInterval {
+  start: string;
+  end: string;
+}
+
+export type WeekDay = 'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday';
+
+export type WeeklySchedule = Record<WeekDay, WorkInterval[]>;
 
 export interface DailySchedule {
   dayOfWeek: number;
@@ -104,16 +114,33 @@ export interface ClientInfo {
   name: string;
   phone?: string;
   email?: string;
+  documentId?: string;
   habeasDataConsent: boolean;
   habeasDataConsentAt?: string;
 }
 
+export type CancellationRequestedBy = 'client' | 'owner' | 'professional' | 'system';
+
+export type CancellationPolicy =
+  | 'client_within_window'
+  | 'client_outside_window'
+  | 'tenant_cancelled'
+  | 'no_show'
+  | 'system_cancelled';
+
+export type RefundStatus = 'not_applicable' | 'pending' | 'approved' | 'failed';
+
+/** Mismo contrato que `Cancellation` del back (domain/entities/appointment.ts). */
 export interface Cancellation {
-  by: 'client' | 'business' | 'professional';
+  requestedBy: CancellationRequestedBy;
+  requestedAt: string;
   reason?: string;
-  refundAmount?: number;
-  processingFee?: number;
-  at?: string;
+  policyApplied: CancellationPolicy;
+  processingFee: number;
+  refundAmount: number;
+  refundStatus: RefundStatus;
+  refundReference?: string;
+  resolvedAt?: string;
 }
 
 export interface Appointment {
@@ -128,6 +155,7 @@ export interface Appointment {
   source: AppointmentSource;
   paymentReference?: string;
   latestPaymentTransactionId?: string;
+  createdAt?: string;
   clientInfo: ClientInfo;
   startTime: string;
   endTime: string;
