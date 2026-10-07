@@ -40,6 +40,23 @@ else
   echo "realm ya existe"
 fi
 
+say "Tema de marca, idiomas y protección contra fuerza bruta"
+api PUT /admin/realms/reserwaya '{
+    "displayName": "ReservaYa",
+    "loginTheme": "reservaya",
+    "internationalizationEnabled": true,
+    "defaultLocale": "es",
+    "supportedLocales": ["en", "es"],
+    "bruteForceProtected": true,
+    "maxFailureWaitSeconds": 900,
+    "minimumQuickLoginWaitSeconds": 60,
+    "waitIncrementSeconds": 60,
+    "quickLoginCheckMilliSeconds": 1000,
+    "maxDeltaTimeSeconds": 43200,
+    "failureFactor": 30
+  }' >/dev/null
+echo "  loginTheme=reservaya, i18n es/en, password-policy (brute force) activa"
+
 say "Roles de la app"
 for r in ry_admin ry_owner ry_professional ry_client; do
   if [ "$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $TOKEN" "$KC/admin/realms/reserwaya/roles/$r")" != "200" ]; then

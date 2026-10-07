@@ -7,7 +7,7 @@ import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatDividerModule } from '@angular/material/divider';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LocaleSwitcher } from '../../shared/components/locale-switcher/locale-switcher.component';
-import { TenantService } from '../../features/public-portal/services/tenant.service';
+import { TenantService, tenantSlugFromSnapshot } from '../../features/public-portal/services/tenant.service';
 
 @Component({
   selector: 'app-public-layout',
@@ -295,8 +295,6 @@ export class PublicLayout implements OnInit {
   private readonly route = inject(ActivatedRoute);
   private readonly tenants = inject(TenantService);
 
-  private readonly slug = signal<string>(DEFAULT_SLUG);
-
   protected readonly tenant = this.tenants.currentTenant;
   protected readonly brandInitial = computed(() => (this.tenant()?.name ?? 'R').charAt(0).toUpperCase());
   protected readonly year = new Date().getFullYear();
@@ -308,12 +306,9 @@ export class PublicLayout implements OnInit {
   ];
 
   ngOnInit(): void {
-    const slug = this.route.snapshot.paramMap.get('tenantSlug');
+    const slug = tenantSlugFromSnapshot(this.route.snapshot);
     if (slug) {
-      this.slug.set(slug);
       this.tenants.resolve(slug).subscribe();
     }
   }
 }
-
-const DEFAULT_SLUG = 'barber-estilo';

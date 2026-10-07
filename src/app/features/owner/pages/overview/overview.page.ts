@@ -14,7 +14,6 @@ import {
   CancelAppointmentDialog,
   CancelAppointmentDialogData,
 } from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
-import { MOCK_TENANT } from '../../../../shared/mocks/tenant.mock';
 import { Appointment, LedgerEntry, Tenant } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 import { isCancellable } from '../../../../shared/utils/cancellation-policy';
@@ -37,7 +36,9 @@ import { isCancellable } from '../../../../shared/utils/cancellation-policy';
     <div class="overview">
       <div class="overview__head">
         <h1>{{ 'dashboard.owner_title' | translate }}</h1>
-        <p>{{ tenant().name }} · {{ planLabel(tenant().planId) }}</p>
+        @if (tenant(); as t) {
+          <p>{{ t.name }} · {{ planLabel(t.planId) }}</p>
+        }
       </div>
 
       <div class="overview__grid">
@@ -91,7 +92,7 @@ import { isCancellable } from '../../../../shared/utils/cancellation-policy';
             </ng-container>
             <ng-container matColumnDef="amount">
               <th mat-header-cell *matHeaderCellDef>{{ 'dashboard.amount' | translate }}</th>
-              <td mat-cell *matCellDef="let a">{{ a.serviceSnapshot.price | appMoney: tenant().currency }}</td>
+              <td mat-cell *matCellDef="let a">{{ a.serviceSnapshot.price | appMoney: tenant()?.currency }}</td>
             </ng-container>
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef>
@@ -143,7 +144,7 @@ import { isCancellable } from '../../../../shared/utils/cancellation-policy';
       </div>
 
       <p class="overview__note">
-        {{ 'dashboard.demo_user' | translate }}: {{ owner().keycloakUserId }} · {{ 'dashboard.session' | translate }}
+        {{ 'dashboard.demo_user' | translate }}: {{ owner()?.keycloakUserId }} · {{ 'dashboard.session' | translate }}
       </p>
     </div>
   `,
@@ -275,7 +276,7 @@ export class OwnerOverviewPage implements OnInit {
   protected readonly cols = ['client', 'service', 'when', 'amount', 'actions'];
   protected readonly mCols = ['date', 'ref', 'credit'];
 
-  private readonly tenantSignal = signal<Tenant>(MOCK_TENANT);
+  private readonly tenantSignal = signal<Tenant | null>(null);
   private readonly revenueSignal = signal(0);
   private readonly totalSignal = signal(0);
   private readonly confirmedTodaySignal = signal(0);
@@ -283,10 +284,7 @@ export class OwnerOverviewPage implements OnInit {
   private readonly commissionSignal = signal(0);
   private readonly upcomingSignal = signal<Appointment[]>([]);
   private readonly movementsSignal = signal<LedgerEntry[]>([]);
-  private readonly ownerSignal = signal<{ keycloakUserId: string; role: string }>({
-    keycloakUserId: 'kc-owner-001',
-    role: 'owner',
-  });
+  private readonly ownerSignal = signal<{ keycloakUserId: string; role: string } | null>(null);
 
   protected readonly tenant = this.tenantSignal.asReadonly();
   protected readonly revenue = this.revenueSignal.asReadonly();
@@ -301,18 +299,24 @@ export class OwnerOverviewPage implements OnInit {
   ngOnInit(): void {
     this.dashboard.ownerContext().subscribe((membership) => {
       if (!membership) return;
-      this.dashboard.ownerOverview(membership.tenantId).subscribe((overview) => {
-        this.tenantSignal.set(overview.tenant);
-        this.revenueSignal.set(Math.round(overview.revenue * 100) / 100);
-        this.totalSignal.set(overview.totalAppointments);
-        this.confirmedTodaySignal.set(overview.confirmedToday);
-        this.occupancySignal.set(overview.occupancy);
-        this.commissionSignal.set(Math.round(overview.commission * 100) / 100);
-        this.upcomingSignal.set(
-          this.booking.withMockCancellations(overview.upcoming).filter((a) => a.status !== 'cancelled'),
-        );
-        this.movementsSignal.set(overview.movements);
-        this.ownerSignal.set(overview.owner);
+      this.dashboard.ownerOverview(membership.tenantId).subscribe({
+        next: (overview) => {
+          this.tenantSignal.set(overview.tenant);
+          this.revenueSignal.set(Math.round(overview.revenue * 100) / 100);
+          this.totalSignal.set(overview.totalAppointments);
+          this.confirmedTodaySignal.set(overview.confirmedToday);
+          this.occupancySignal.set(overview.occupancy);
+          this.commissionSignal.set(Math.round(overview.commission * 100) / 100);
+          this.upcomingSignal.set(
+            this.booking.withMockCancellations(overview.upcoming).filter((a) => a.status !== 'cancelled'),
+          );
+          this.movementsSignal.set(overview.movements);
+          this.ownerSignal.set(overview.owner);
+        },
+        error: () => {
+          this.upcomingSignal.set([]);
+          this.movementsSignal.set([]);
+        },
       });
     });
   }

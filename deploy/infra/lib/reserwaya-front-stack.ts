@@ -58,6 +58,10 @@ export class ReserwayaFrontStack extends Stack {
       destinationBucket: assetsBucket,
       destinationKeyPrefix: '',
       prune: true,
+      cacheControl: [
+        s3deploy.CacheControl.maxAge(Duration.hours(1)),
+        s3deploy.CacheControl.mustRevalidate(),
+      ],
     });
 
     const assetsOriginAccessControl = new S3OriginAccessControl(this, 'AssetsOac', {

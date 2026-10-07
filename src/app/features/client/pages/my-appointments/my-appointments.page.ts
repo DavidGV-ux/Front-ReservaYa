@@ -31,7 +31,12 @@ import { estimateCancellation, isCancellable } from '../../../../shared/utils/ca
     <div class="appointments">
       <div class="appointments__head">
         <h1>{{ 'dashboard.my_appointments' | translate }}</h1>
-        <p>{{ 'dashboard.my_appointments_hint' | translate }}</p>
+        <p>
+          @if (businessName(); as name) {
+            <span class="appointments__biz">{{ name }} · </span>
+          }
+          {{ 'dashboard.my_appointments_hint' | translate }}
+        </p>
       </div>
 
       <div class="appointments__list">
@@ -79,6 +84,7 @@ import { estimateCancellation, isCancellable } from '../../../../shared/utils/ca
           <mat-card class="appointments__empty">
             <mat-icon>event_available</mat-icon>
             <p>{{ 'history.empty' | translate }}</p>
+            <p class="appointments__empty-hint">{{ 'dashboard.my_appointments_empty_hint' | translate }}</p>
           </mat-card>
         }
       </div>
@@ -103,6 +109,10 @@ import { estimateCancellation, isCancellable } from '../../../../shared/utils/ca
         margin: 4px 0 0;
         color: var(--mat-sys-on-surface-variant);
       }
+    }
+
+    .appointments__biz {
+      font-weight: 600;
     }
 
     .appointments__list {
@@ -193,6 +203,11 @@ import { estimateCancellation, isCancellable } from '../../../../shared/utils/ca
       text-align: center;
       color: var(--mat-sys-on-surface-variant);
     }
+
+    .appointments__empty-hint {
+      margin: 8px 0 0;
+      font-size: 13px;
+    }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -206,8 +221,10 @@ export class ClientMyAppointmentsPage implements OnInit {
 
   protected readonly tenant = this.tenants.currentTenant;
   private readonly session = signal<Appointment[]>([]);
+  private readonly business = signal<string | null>(null);
 
   protected readonly all = this.session.asReadonly();
+  protected readonly businessName = this.business.asReadonly();
 
   ngOnInit(): void {
     this.reload();
@@ -244,9 +261,14 @@ export class ClientMyAppointmentsPage implements OnInit {
   private reload(): void {
     this.dashboard.roleContext('client').subscribe((membership) => {
       if (!membership) {
-        this.session.set([]);
+        this.business.set(null);
+        this.dashboard.allAppointments().subscribe({
+          next: (list) => this.session.set(this.booking.withMockCancellations(list)),
+          error: () => this.session.set([]),
+        });
         return;
       }
+      this.business.set(membership.name ?? null);
       this.tenants.resolve(membership.slug).subscribe({
         next: () => undefined,
         error: () => undefined,

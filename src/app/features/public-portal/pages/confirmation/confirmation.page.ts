@@ -6,7 +6,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { BookingService } from '../../services/booking.service';
-import { TenantService } from '../../services/tenant.service';
+import { TenantService, tenantSlugFromSnapshot } from '../../services/tenant.service';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
@@ -171,7 +171,7 @@ export class ConfirmationPage implements OnInit {
   ngOnInit(): void {
     const ref = this.route.snapshot.queryParamMap.get('ref');
     if (!ref) return;
-    const slug = this.route.snapshot.paramMap.get('tenantSlug');
+    const slug = tenantSlugFromSnapshot(this.route.snapshot);
     const resolved = this.tenants.currentTenant();
     if (resolved) {
       this.fetch(resolved.tenantId, ref);
