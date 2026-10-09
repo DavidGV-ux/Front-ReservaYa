@@ -200,7 +200,7 @@ export class CompleteProfileDialog {
     phoneCountry: new FormControl('CO', { nonNullable: true }),
     phone: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     cityCountry: new FormControl('CO', { nonNullable: true }),
-    city: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
+    city: new FormControl('', { nonNullable: true }),
   });
 
   protected readonly phoneCode = computed(
@@ -281,13 +281,9 @@ export class CompleteProfileDialog {
 
   private validateCity(): void {
     const control = this.form.controls.city;
-    const value = control.value?.trim() ?? '';
-    if (!value) {
-      control.setErrors({ required: true });
-      return;
-    }
-    const listed = this.cities().some((c) => c.toLowerCase() === value.toLowerCase());
-    control.setErrors(listed ? null : { notListed: true });
+    // La ciudad es opcional: solo personaliza el saludo. El teléfono es lo que
+    // dispara el envío de la bienvenida por WhatsApp.
+    control.setErrors(null);
   }
 
   protected async submit(): Promise<void> {

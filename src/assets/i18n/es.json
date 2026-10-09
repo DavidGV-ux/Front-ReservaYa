@@ -22,7 +22,9 @@
       "title": "Página no encontrada",
       "message": "La página que buscas no existe o ya no está disponible.",
       "goHome": "Volver al inicio"
-    }
+    },
+    "continue": "Continuar",
+    "close": "Cerrar"
   },
   "header": {
     "nav_services": "Servicios",
@@ -168,7 +170,10 @@
     "status_expired": "Expirada",
     "pay_pending": "Pago pendiente",
     "pay_approved": "Anticipo pagado",
+    "pay_approved_full": "Pago completo",
     "pay_rejected": "Pago rechazado",
+    "pay_refunded": "Reembolsado",
+    "pay_partially_refunded": "Reembolso parcial",
     "reserved_on": "Reservada",
     "paid_on": "Anticipo pagado",
     "reminder_card": "Recuerda tu cita",
@@ -195,6 +200,9 @@
     "menu_my_schedule": "Mi agenda",
     "menu_my_appointments": "Mis citas",
     "menu_my_reservations": "Mis reservas",
+    "menu_upcoming": "Próximas citas",
+    "menu_my_payments": "Mis pagos",
+    "menu_history": "Historial",
     "menu_tenants": "Negocios",
     "role_owner": "Dueño",
     "role_professional": "Profesional",
@@ -242,10 +250,16 @@
     "configure_availability": "Configurar disponibilidad",
     "not_professional_here": "No trabajas como profesional en este negocio. Cambia de negocio desde la barra superior.",
     "my_appointments": "Mis citas",
-    "my_appointments_hint": "Consulta y gestiona tus citas",
-    "my_appointments_empty_hint": "Consulta todas tus reservas en “Mis reservas”.",
+    "my_appointments_hint": "Las citas que apartaste en los negocios cercanos",
+    "my_appointments_empty": "No tienes citas próximas.",
+    "my_appointments_empty_hint": "Cuando reserves o pagues un anticipo, tus próximas citas aparecerán aquí.",
     "my_reservations": "Mis reservas",
     "my_reservations_hint": "Tus citas en todos los negocios donde has reservado",
+    "my_payments": "Mis pagos",
+    "my_payments_hint": "Los anticipos y pagos que has hecho por tus reservas",
+    "my_payments_empty": "Aún no has hecho pagos.",
+    "my_payments_empty_cta": "Buscar un servicio",
+    "my_payments_note": "El valor corresponde al servicio completo. El anticipo se descuenta al momento del pago; los anticipos se procesan a través del enlace de pago del negocio.",
     "cancel": "Cancelar",
     "cancelled_ok": "Cita cancelada correctamente.",
     "admin_tenants": "Negocios",
@@ -321,6 +335,7 @@
       "paid": "anticipos cobrados",
       "due": "faltante esperado",
       "advance": "Anticipo",
+      "paid_label": "Pagado",
       "due_label": "Faltante",
       "appointment_state": "Estado de la cita",
       "complete": "Completar",
@@ -343,7 +358,7 @@
       "outstanding": "Faltante por cobrar",
       "outstanding_hint": "Saldo restante de las citas confirmadas",
       "commission_hint": "Retenida por la plataforma en el periodo",
-      "advance_by_appointment": "Anticipo por cita",
+      "advance_by_appointment": "Pago por cita",
       "pay_state": "Estado de pago",
       "no_movements": "Sin movimientos en el periodo.",
       "type": "Concepto",
@@ -428,7 +443,9 @@
     "cta_subtitle": "Crea tu espacio gratis y empieza a recibir reservas y anticipos hoy mismo.",
     "go_dashboard": "Ir al panel",
     "go_owner_dashboard": "Panel empresario",
-    "go_client_dashboard": "Panel cliente"
+    "go_professional_dashboard": "Panel profesional",
+    "go_client_dashboard": "Panel cliente",
+    "cta_register": "Crear cuenta"
   },
   "onboarding": {
     "title": "Crea tu espacio de trabajo",
@@ -452,7 +469,7 @@
   },
   "profile": {
     "complete_title": "Completa tu perfil",
-    "note": "Registraste tu cuenta en ReservaYa. Para agendar también por WhatsApp con nuestro asistente de IA, cuéntanos tu número y tu ciudad: te enviaremos una invitación por ese canal.",
+    "note": "Registraste tu cuenta en ReservaYa. Para agendar también por WhatsApp con nuestro asistente de IA, escribe tu número: te enviaremos en seguida una invitación por ese canal. Tu ciudad es opcional.",
     "phone_country_label": "País del número",
     "phone_label": "Número de WhatsApp",
     "phone_placeholder": "300 123 4567",
@@ -467,5 +484,34 @@
     "submit": "Guardar y recibir invitación",
     "done": "¡Listo! Te enviamos la invitación por WhatsApp. 📲",
     "error": "No pudimos guardar tu perfil. Inténtalo de nuevo."
+  },
+  "auth": {
+    "register": {
+      "title": "Crea tu cuenta",
+      "subtitle": "Regístrate gratis para reservar servicios y gestionar tu negocio.",
+      "name_label": "Nombre completo",
+      "name_required": "Ingresa tu nombre",
+      "email_label": "Correo electrónico",
+      "email_required": "Ingresa tu correo",
+      "email_invalid": "Ingresa un correo válido",
+      "password_label": "Contraseña",
+      "password_required": "Ingresa una contraseña",
+      "password_min": "La contraseña debe tener al menos 8 caracteres",
+      "confirm_label": "Confirma tu contraseña",
+      "confirm_required": "Confirma tu contraseña",
+      "confirm_mismatch": "Las contraseñas no coinciden",
+      "consent_label": "Acepto el tratamiento de mis datos personales y la política de",
+      "consent_required": "Debes aceptar el tratamiento de datos (Habeas Data)",
+      "privacy_link": "privacidad",
+      "submit": "Crear cuenta",
+      "login_prompt": "¿Ya tienes cuenta?",
+      "login_link": "Inicia sesión",
+      "success_title": "¡Cuenta creada!",
+      "success_text": "Tu cuenta se creó correctamente. Te llevaremos al inicio de sesión.",
+      "error_title": "No se pudo crear la cuenta",
+      "error_email_taken": "Ese correo ya está registrado. Intenta iniciar sesión.",
+      "error_rate_limited": "Demasiados intentos. Espera un momento e inténtalo de nuevo.",
+      "error_generic": "Revisa los datos e inténtalo de nuevo."
+    }
   }
 }

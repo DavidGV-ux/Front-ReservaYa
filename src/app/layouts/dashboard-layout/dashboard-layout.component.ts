@@ -1,5 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal } from '@angular/core';
-import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, computed, effect, inject, signal } from '@angular/core';
+import { NavigationEnd, Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { filter } from 'rxjs';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,18 +10,17 @@ import { MatListModule } from '@angular/material/list';
 import { MatMenuModule } from '@angular/material/menu';
 import { TranslatePipe } from '@ngx-translate/core';
 import { AuthService } from '../../core/auth/auth.service';
-import { USER_ROLES, BUSINESS_ROLES, BusinessRole, bestBusinessRole } from '../../core/auth/roles';
+import { BUSINESS_ROLES, bestBusinessRole, type BusinessRole } from '../../core/auth/roles';
 import { LocaleSwitcher } from '../../shared/components/locale-switcher/locale-switcher.component';
 import { DashboardService } from '../../features/dashboard/services/dashboard.service';
 import { TenantMembership } from '../../core/http/api-mappers';
+
+type PanelId = 'owner' | 'professional' | 'client' | 'admin';
 
 interface MenuLink {
   label: string;
   route: string;
   icon: string;
-  roles?: BusinessRole[];
-  adminOnly?: boolean;
-  always?: boolean;
 }
 
 @Component({
@@ -72,7 +73,8 @@ interface MenuLink {
             {{ roleLabel() | translate }}
           </span>
 
-          @if (allBusinesses().length > 1) {
+          @if (isBusinessPanel()) {
+            @if (allBusinesses().length > 1) {
               <button mat-button [matMenuTriggerFor]="bizMenu" class="shell__biz">
                 <mat-icon>storefront</mat-icon>
                 <span class="shell__biz-name">{{ activeBusiness()?.name }}</span>
@@ -95,6 +97,7 @@ interface MenuLink {
                 <span class="shell__biz-name">{{ biz.name }}</span>
               </span>
             }
+          }
 
           <div class="shell__spacer"></div>
           <button mat-button routerLink="/" class="shell__home">
@@ -250,45 +253,79 @@ export class DashboardLayout implements OnInit {
   private readonly auth = inject(AuthService);
   private readonly dashboard = inject(DashboardService);
   private readonly router = inject(Router);
+  private readonly destroy = inject(DestroyRef);
 
   protected readonly displayName = computed(() => this.auth.session().name);
-  protected readonly isAdmin = computed(() =>
-    this.auth.session().roles.includes(USER_ROLES.ADMIN),
-  );
 
   protected readonly allBusinesses = signal<TenantMembership[]>([]);
   protected readonly activeBusiness = signal<TenantMembership | null>(null);
-  // El negocio activo puede darle a un usuario VARIOS roles a la vez
-  // (p. ej. dueño y cliente). El menú se filtra por ese conjunto de roles.
-  protected readonly activeRoles = computed(() => this.activeBusiness()?.roles ?? []);
-  protected readonly primaryRole = computed<BusinessRole>(() =>
-    bestBusinessRole(this.activeBusiness()?.roles),
+  protected readonly panel = signal<PanelId>('client');
+
+  protected readonly visibleLinks = computed<MenuLink[]>(() => MENU[this.panel()]);
+  protected readonly roleLabel = computed(() => {
+    switch (this.panel()) {
+      case 'admin':
+        return 'dashboard.role_admin';
+      case 'owner':
+        return 'dashboard.role_owner';
+      case 'professional':
+        return 'dashboard.role_professional';
+      default:
+        return 'dashboard.role_client';
+    }
+  });
+  protected readonly isBusinessPanel = computed(
+    () => this.panel() === 'owner' || this.panel() === 'professional',
   );
 
-  protected readonly visibleLinks = computed<MenuLink[]>(() => {
-    const roles = new Set(this.activeRoles());
-    return MENU_LINKS.filter((link) => {
-      if (link.adminOnly) return this.isAdmin();
-      if (link.always) return true;
-      return (link.roles ?? []).some((r) => roles.has(r));
-    });
-  });
-  protected readonly roleLabel = computed(() => {
-    if (this.isAdmin()) return 'dashboard.role_admin';
-    const role = this.primaryRole();
-    if (role === BUSINESS_ROLES.OWNER) return 'dashboard.role_owner';
-    if (role === BUSINESS_ROLES.PROFESSIONAL) return 'dashboard.role_professional';
-    return 'dashboard.role_client';
-  });
-
   ngOnInit(): void {
-    this.dashboard.myTenants().subscribe((list) => {
-      this.allBusinesses.set(list);
-      const stored = this.dashboard.storedActiveTenant();
-      this.activeBusiness.set(
-        list.find((b) => b.tenantId === stored) ?? list[0] ?? null,
-      );
-    });
+    this.router.events
+      .pipe(
+        filter((e): e is NavigationEnd => e instanceof NavigationEnd),
+        takeUntilDestroyed(this.destroy),
+      )
+      .subscribe((e) => this.syncPanel(e.urlAfterRedirects));
+    this.syncPanel(this.router.url);
+    this.loadPanelTenants();
+  }
+
+  /**
+   * El desplegable de negocios se resuelve por el ROL del panel actual:
+   * dueño → solo negocios que administra; profesional → solo negocios donde
+   * trabaja; cliente/admin → sin desplegable (el panel de cliente es global).
+   */
+  private loadPanelTenants(): void {
+    const panel = this.panel();
+    if (panel === 'owner') {
+      this.dashboard.myTenants('owner').subscribe((list) => this.applyTenants(list));
+    } else if (panel === 'professional') {
+      this.dashboard.myTenants('professional').subscribe((list) => this.applyTenants(list));
+    } else {
+      this.applyTenants([]);
+    }
+  }
+
+  private applyTenants(list: TenantMembership[]): void {
+    this.allBusinesses.set(list);
+    const stored = this.dashboard.storedActiveTenant();
+    this.activeBusiness.set(
+      list.find((b) => b.tenantId === stored) ?? list[0] ?? null,
+    );
+  }
+
+  private syncPanel(url: string): void {
+    const next =
+      url.startsWith('/app/owner')
+        ? 'owner'
+        : url.startsWith('/app/professional')
+          ? 'professional'
+          : url.startsWith('/app/admin')
+            ? 'admin'
+            : 'client';
+    if (next !== this.panel()) {
+      this.panel.set(next);
+      this.loadPanelTenants();
+    }
   }
 
   switchTenant(biz: TenantMembership): void {
@@ -314,75 +351,27 @@ export class DashboardLayout implements OnInit {
 function defaultRouteFor(role: BusinessRole): string {
   if (role === BUSINESS_ROLES.OWNER) return '/app/owner';
   if (role === BUSINESS_ROLES.PROFESSIONAL) return '/app/professional';
-  if (role === BUSINESS_ROLES.CLIENT) return '/app/client';
-  return '/app/admin';
+  return '/app/client';
 }
 
-const MENU_LINKS: MenuLink[] = [
-  {
-    label: 'dashboard.menu_overview',
-    route: '/app/owner',
-    icon: 'dashboard',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_appointments',
-    route: '/app/owner/citas',
-    icon: 'event_note',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_payments',
-    route: '/app/owner/pagos',
-    icon: 'payments',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_services',
-    route: '/app/owner/services',
-    icon: 'content_cut',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_professionals',
-    route: '/app/owner/professionals',
-    icon: 'groups',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_schedule',
-    route: '/app/owner',
-    icon: 'event_busy',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_reports',
-    route: '/app/owner/reports',
-    icon: 'assessment',
-    roles: [BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_my_schedule',
-    route: '/app/professional',
-    icon: 'schedule',
-    roles: [BUSINESS_ROLES.PROFESSIONAL, BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_my_appointments',
-    route: '/app/client',
-    icon: 'event_note',
-    roles: [BUSINESS_ROLES.CLIENT, BUSINESS_ROLES.OWNER],
-  },
-  {
-    label: 'dashboard.menu_my_reservations',
-    route: '/app/reservas',
-    icon: 'receipt_long',
-    always: true,
-  },
-  {
-    label: 'dashboard.menu_tenants',
-    route: '/app/admin',
-    icon: 'storefront',
-    adminOnly: true,
-  },
-];
+const MENU: Record<PanelId, MenuLink[]> = {
+  owner: [
+    { label: 'dashboard.menu_overview', route: '/app/owner', icon: 'dashboard' },
+    { label: 'dashboard.menu_appointments', route: '/app/owner/citas', icon: 'event_note' },
+    { label: 'dashboard.menu_payments', route: '/app/owner/pagos', icon: 'payments' },
+    { label: 'dashboard.menu_services', route: '/app/owner/services', icon: 'content_cut' },
+    { label: 'dashboard.menu_professionals', route: '/app/owner/professionals', icon: 'groups' },
+    { label: 'dashboard.menu_reports', route: '/app/owner/reports', icon: 'assessment' },
+  ],
+  professional: [
+    { label: 'dashboard.menu_my_schedule', route: '/app/professional', icon: 'schedule' },
+  ],
+  client: [
+    { label: 'dashboard.menu_upcoming', route: '/app/client', icon: 'event_note' },
+    { label: 'dashboard.menu_my_payments', route: '/app/client/pagos', icon: 'payments' },
+    { label: 'dashboard.menu_history', route: '/app/reservas', icon: 'history' },
+  ],
+  admin: [
+    { label: 'dashboard.menu_tenants', route: '/app/admin', icon: 'storefront' },
+  ],
+};

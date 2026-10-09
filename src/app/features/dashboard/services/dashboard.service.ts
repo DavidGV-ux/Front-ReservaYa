@@ -106,25 +106,28 @@ function mockMembership(): TenantMembership {
 export class DashboardService {
   private readonly api = inject(ApiService);
 
-  /** Cache de membresías de la sesión; se invalida tras onboarding o logout. */
-  private tenantsCache: TenantMembership[] | null = null;
+  /** Cache de membresías de la sesión por rol ('' = todas); se invalida tras onboarding o logout. */
+  private tenantsCache = new Map<string, TenantMembership[]>();
 
-  myTenants(): Observable<TenantMembership[]> {
+  myTenants(role?: 'owner' | 'professional' | 'client'): Observable<TenantMembership[]> {
+    const key = role ?? '';
     if (environment.useMockBackend) {
-      return of([mockMembership()]);
+      return of(key === '' || key === 'owner' ? [mockMembership()] : []);
     }
-    if (this.tenantsCache) {
-      return of(this.tenantsCache);
+    if (this.tenantsCache.has(key)) {
+      return of(this.tenantsCache.get(key)!);
     }
-    return this.api.get<TenantMembership[]>('/me/tenants').pipe(
-      tap((list) => {
-        this.tenantsCache = list;
-      }),
-    );
+    return this.api
+      .get<TenantMembership[]>(`/me/tenants${role ? `?role=${role}` : ''}`)
+      .pipe(
+        tap((list) => {
+          this.tenantsCache.set(key, list);
+        }),
+      );
   }
 
   invalidateTenants(): void {
-    this.tenantsCache = null;
+    this.tenantsCache.clear();
   }
 
   storedOwnerTenant(): string | null {
@@ -173,11 +176,27 @@ export class DashboardService {
     if (environment.useMockBackend) {
       return of({ ...mockMembership(), tenantId: stored ?? MOCK_TENANT.tenantId });
     }
-    return this.myTenants().pipe(
-      map((list) => {
-        const owners = list.filter((m) => m.roles.includes('owner'));
+    return this.myTenants('owner').pipe(
+      map((owners) => {
         const preferred = stored ? owners.find((m) => m.tenantId === stored) : undefined;
         return preferred ?? owners[0] ?? null;
+      }),
+    );
+  }
+
+  /**
+   * Contexto del profesional: SOLO negocios donde el usuario es `professional`
+   * (nunca negocios que solo administra). Sin membresía como profesional => null.
+   */
+  professionalContext(): Observable<TenantMembership | null> {
+    if (environment.useMockBackend) {
+      return of({ ...mockMembership(), role: 'professional', roles: ['professional'] });
+    }
+    return this.myTenants('professional').pipe(
+      map((list) => {
+        const stored = this.storedActiveTenant();
+        const preferred = stored ? list.find((m) => m.tenantId === stored) : undefined;
+        return preferred ?? list[0] ?? null;
       }),
     );
   }
@@ -275,7 +294,7 @@ export class DashboardService {
       const rows = MOCK_APPOINTMENTS.map((a): OwnerAppointmentRow => {
         const advanceAmount =
           Math.round(a.serviceSnapshot.price * (MOCK_TENANT.settings.upfrontPercent / 100) * 100) / 100;
-        const paidAmount = a.paymentStatus === 'approved' ? advanceAmount : 0;
+        const paidAmount = a.paymentStatus === 'approved' ? (a.paidAmount && a.paidAmount > 0 ? a.paidAmount : advanceAmount) : 0;
         return {
           appointment: a,
           advanceAmount,
@@ -314,7 +333,7 @@ export class DashboardService {
       const updated = { ...appt, status, version: version + 1 };
       const advanceAmount =
         Math.round(updated.serviceSnapshot.price * (MOCK_TENANT.settings.upfrontPercent / 100) * 100) / 100;
-      const paidAmount = updated.paymentStatus === 'approved' ? advanceAmount : 0;
+      const paidAmount = updated.paymentStatus === 'approved' ? (updated.paidAmount && updated.paidAmount > 0 ? updated.paidAmount : advanceAmount) : 0;
       return of({
         appointment: updated,
         advanceAmount,

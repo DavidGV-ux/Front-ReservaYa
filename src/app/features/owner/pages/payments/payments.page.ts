@@ -8,7 +8,7 @@ import {
   DashboardService,
   OwnerAppointmentRow,
 } from '../../../dashboard/services/dashboard.service';
-import { LedgerEntry, Tenant } from '../../../../shared/models/domain.model';
+import { LedgerEntry, Tenant, Currency } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
 @Component({
@@ -76,7 +76,7 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
                   <td mat-cell *matCellDef="let row">{{ dateTime(row.appointment.startTime) }}</td>
                 </ng-container>
                 <ng-container matColumnDef="advance">
-                  <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.advance' | translate }}</th>
+                  <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.paid_label' | translate }}</th>
                   <td mat-cell *matCellDef="let row" class="panel__paid">
                     {{ row.paidAmount | appMoney: row.currency }}
                   </td>
@@ -84,14 +84,14 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
                 <ng-container matColumnDef="due">
                   <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.due_label' | translate }}</th>
                   <td mat-cell *matCellDef="let row" class="panel__due">
-                    {{ row.dueAmount | appMoney: row.currency }}
+                    {{ dueText(row) }}
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="pay">
                   <th mat-header-cell *matHeaderCellDef>{{ 'owner.pagos.pay_state' | translate }}</th>
                   <td mat-cell *matCellDef="let row">
                     <span class="pagos__pay pagos__pay--{{ row.appointment.paymentStatus }}">
-                      {{ 'history.pay_' + row.appointment.paymentStatus | translate }}
+                      {{ payLabel(row) }}
                     </span>
                   </td>
                 </ng-container>
@@ -292,6 +292,7 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 export class OwnerPaymentsPage implements OnInit {
   private readonly dashboard = inject(DashboardService);
   private readonly translate = inject(TranslateService);
+  private readonly moneyPipe = inject(MoneyPipe);
 
   protected readonly pCols = ['client', 'when', 'advance', 'due', 'pay'];
   protected readonly mCols = ['date', 'ref', 'type', 'amount'];
@@ -363,6 +364,21 @@ export class OwnerPaymentsPage implements OnInit {
       hour: '2-digit',
       minute: '2-digit',
     }).format(new Date(iso));
+  }
+
+  protected dueText(row: OwnerAppointmentRow): string {
+    return row.dueAmount > 0 ? this.moneyPipe.transform(row.dueAmount, row.currency as Currency) : '—';
+  }
+
+  protected payLabel(row: OwnerAppointmentRow): string {
+    if (
+      row.appointment.paymentStatus === 'approved' &&
+      row.paidAmount > 0 &&
+      row.paidAmount >= row.appointment.serviceSnapshot.price
+    ) {
+      return this.translate.instant('history.pay_approved_full');
+    }
+    return this.translate.instant('history.pay_' + row.appointment.paymentStatus);
   }
 
   private locale(): string {

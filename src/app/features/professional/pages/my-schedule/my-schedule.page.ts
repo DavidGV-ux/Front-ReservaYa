@@ -183,7 +183,7 @@ export class MySchedulePage implements OnInit {
   protected readonly dayAppointments = this.dayAppts.asReadonly();
 
   ngOnInit(): void {
-    this.dashboard.roleContext('professional').subscribe((membership) => {
+    this.dashboard.professionalContext().subscribe((membership) => {
       this.tenantContext.set(membership?.tenantId ?? null);
       this.business.set(membership?.name ?? null);
       if (!membership) {

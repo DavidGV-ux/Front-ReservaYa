@@ -139,6 +139,7 @@ export interface Appointment {
   source: AppointmentSource;
   paymentReference?: string;
   latestPaymentTransactionId?: string;
+  paidAmount?: number;
   createdAt?: string;
   clientInfo: ClientInfo;
   startTime: string;

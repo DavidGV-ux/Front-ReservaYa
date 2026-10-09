@@ -22,7 +22,9 @@
       "title": "Page not found",
       "message": "The page you are looking for does not exist or is no longer available.",
       "goHome": "Back to home"
-    }
+    },
+    "continue": "Continue",
+    "close": "Close"
   },
   "header": {
     "nav_services": "Services",
@@ -168,7 +170,10 @@
     "status_expired": "Expired",
     "pay_pending": "Payment pending",
     "pay_approved": "Advance paid",
+    "pay_approved_full": "Fully paid",
     "pay_rejected": "Payment declined",
+    "pay_refunded": "Refunded",
+    "pay_partially_refunded": "Partial refund",
     "reserved_on": "Reserved",
     "paid_on": "Advance paid",
     "reminder_card": "Remember your appointment",
@@ -195,6 +200,9 @@
     "menu_my_schedule": "My schedule",
     "menu_my_appointments": "My appointments",
     "menu_my_reservations": "My reservations",
+    "menu_upcoming": "Upcoming appointments",
+    "menu_my_payments": "My payments",
+    "menu_history": "History",
     "menu_tenants": "Businesses",
     "role_owner": "Owner",
     "role_professional": "Professional",
@@ -242,10 +250,16 @@
     "configure_availability": "Set availability",
     "not_professional_here": "You don't work as a professional at this business. Switch businesses from the top bar.",
     "my_appointments": "My appointments",
-    "my_appointments_hint": "Review and manage your appointments",
-    "my_appointments_empty_hint": "Check all your bookings under “My reservations”.",
+    "my_appointments_hint": "Appointments you booked at nearby businesses",
+    "my_appointments_empty": "You have no upcoming appointments.",
+    "my_appointments_empty_hint": "When you book or pay a deposit, your upcoming appointments will appear here.",
     "my_reservations": "My reservations",
     "my_reservations_hint": "Your appointments across every business where you booked",
+    "my_payments": "My payments",
+    "my_payments_hint": "The deposits and payments you've made for your bookings",
+    "my_payments_empty": "You haven't made any payments yet.",
+    "my_payments_empty_cta": "Find a service",
+    "my_payments_note": "The amount shown is for the full service. The deposit is deducted at checkout; deposits are processed through the business payment link.",
     "cancel": "Cancel",
     "cancelled_ok": "Appointment cancelled successfully.",
     "admin_tenants": "Businesses",
@@ -321,6 +335,7 @@
       "paid": "advances collected",
       "due": "expected balance",
       "advance": "Advance",
+      "paid_label": "Paid",
       "due_label": "Balance due",
       "appointment_state": "Appointment status",
       "complete": "Complete",
@@ -343,7 +358,7 @@
       "outstanding": "Balance due",
       "outstanding_hint": "Remaining balance of confirmed appointments",
       "commission_hint": "Held by the platform in the period",
-      "advance_by_appointment": "Advance per appointment",
+      "advance_by_appointment": "Payment per appointment",
       "pay_state": "Payment status",
       "no_movements": "No movements in this period.",
       "type": "Concept",
@@ -428,7 +443,9 @@
     "cta_subtitle": "Create your free space and start receiving bookings and deposits today.",
     "go_dashboard": "Go to dashboard",
     "go_owner_dashboard": "Business panel",
-    "go_client_dashboard": "Client panel"
+    "go_professional_dashboard": "Professional panel",
+    "go_client_dashboard": "Client panel",
+    "cta_register": "Create account"
   },
   "onboarding": {
     "title": "Create your workspace",
@@ -452,7 +469,7 @@
   },
   "profile": {
     "complete_title": "Complete your profile",
-    "note": "You created your ReservaYa account. To also book through WhatsApp with our AI assistant, tell us your phone and city: we will send you an invitation there.",
+    "note": "You created your ReservaYa account. To also book through WhatsApp with our AI assistant, just enter your phone: we will send you an invitation right away. Your city is optional.",
     "phone_country_label": "Country of the number",
     "phone_label": "WhatsApp number",
     "phone_placeholder": "300 123 4567",
@@ -467,5 +484,34 @@
     "submit": "Save and get the invitation",
     "done": "Done! We sent you the WhatsApp invitation. 📲",
     "error": "Could not save your profile. Please try again."
+  },
+  "auth": {
+    "register": {
+      "title": "Create your account",
+      "subtitle": "Sign up for free to book services and manage your business.",
+      "name_label": "Full name",
+      "name_required": "Enter your name",
+      "email_label": "Email address",
+      "email_required": "Enter your email",
+      "email_invalid": "Enter a valid email",
+      "password_label": "Password",
+      "password_required": "Enter a password",
+      "password_min": "Password must be at least 8 characters",
+      "confirm_label": "Confirm your password",
+      "confirm_required": "Confirm your password",
+      "confirm_mismatch": "Passwords do not match",
+      "consent_label": "I accept the processing of my personal data and the",
+      "consent_required": "You must accept the data processing (Habeas Data)",
+      "privacy_link": "privacy policy",
+      "submit": "Create account",
+      "login_prompt": "Already have an account?",
+      "login_link": "Sign in",
+      "success_title": "Account created!",
+      "success_text": "Your account was created. We will take you to sign in.",
+      "error_title": "Could not create account",
+      "error_email_taken": "This email is already registered. Try signing in.",
+      "error_rate_limited": "Too many attempts. Wait a moment and try again.",
+      "error_generic": "Check your details and try again."
+    }
   }
 }
