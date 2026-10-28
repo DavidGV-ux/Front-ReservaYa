@@ -1,8 +1,9 @@
-import { Pipe, PipeTransform, inject } from '@angular/core';
+import { Pipe, PipeTransform, Injectable, inject } from '@angular/core';
 import { TranslateService } from '@ngx-translate/core';
 import { Currency } from '../models/domain.model';
 
 @Pipe({ name: 'appMoney', standalone: true })
+@Injectable({ providedIn: 'root' })
 export class MoneyPipe implements PipeTransform {
   private readonly translate = inject(TranslateService);
 

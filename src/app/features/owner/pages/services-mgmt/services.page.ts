@@ -4,10 +4,12 @@ import { MatTableModule } from '@angular/material/table';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatDialog } from '@angular/material/dialog';
 import { TranslatePipe } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
 import { Service } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { ServiceDialog } from '../../components/service-dialog/service-dialog.component';
 
 @Component({
   selector: 'app-owner-services',
@@ -24,7 +26,7 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
     <div class="services">
       <div class="services__head">
         <h1>{{ 'dashboard.manage_services' | translate }}</h1>
-        <button mat-flat-button>
+        <button mat-flat-button (click)="openCreate()">
           <mat-icon>add</mat-icon>
           {{ 'dashboard.add_service' | translate }}
         </button>
@@ -97,16 +99,35 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 })
 export class OwnerServicesPage implements OnInit {
   private readonly dashboard = inject(DashboardService);
+  private readonly dialog = inject(MatDialog);
   private readonly items = signal<Service[]>([]);
   protected readonly cols = ['name', 'duration', 'price', 'status'];
+
+  private currentTenantId = '';
 
   protected readonly rows = this.items.asReadonly();
 
   ngOnInit(): void {
     this.dashboard.ownerContext().subscribe((membership) => {
       if (!membership) return;
+      this.currentTenantId = membership.tenantId;
       this.dashboard.ownerServices(membership.tenantId).subscribe((list) => this.items.set(list));
     });
+  }
+
+  protected openCreate(): void {
+    if (!this.currentTenantId) return;
+    const currency = this.items()[0]?.currency ?? 'COP';
+    const tenantId = this.currentTenantId;
+    this.dialog
+      .open(ServiceDialog, { data: { tenantId, currency }, width: '520px' })
+      .afterClosed()
+      .subscribe((created) => {
+        if (!created) return;
+        this.dashboard
+          .ownerServices(tenantId)
+          .subscribe((list) => this.items.set(list));
+      });
   }
 
   protected toggle(service: Service): void {

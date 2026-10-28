@@ -7,7 +7,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectChange } from '@angular/material/select';
 import { TranslatePipe } from '@ngx-translate/core';
-import { TenantService } from '../../services/tenant.service';
+import { TenantService, tenantSlugFromSnapshot } from '../../services/tenant.service';
 import { PortalDataService } from '../../services/portal-data.service';
 import { Professional, Service } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
@@ -171,7 +171,8 @@ export class ServicesPage implements OnInit {
   protected readonly filteredServices = signal<Service[]>([]);
 
   ngOnInit(): void {
-    const slug = this.route.snapshot.paramMap.get('tenantSlug') ?? 'barber-estilo';
+    const slug = tenantSlugFromSnapshot(this.route.snapshot);
+    if (!slug) return;
     this.tenants.resolve(slug).subscribe((tenant) => {
       this.data.services(tenant.tenantId).subscribe((s) => {
         this.allServices.set(s);

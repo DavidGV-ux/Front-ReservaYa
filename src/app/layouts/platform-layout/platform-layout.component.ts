@@ -1,14 +1,18 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog } from '@angular/material/dialog';
 import { TranslatePipe } from '@ngx-translate/core';
 import { LocaleSwitcher } from '../../shared/components/locale-switcher/locale-switcher.component';
 import { AuthService } from '../../core/auth/auth.service';
-import { USER_ROLES } from '../../core/auth/roles';
+import { BUSINESS_ROLES } from '../../core/auth/roles';
+import { DashboardService } from '../../features/dashboard/services/dashboard.service';
+import { PlatformService } from '../../features/platform/services/platform.service';
+import { CompleteProfileDialog } from '../../features/platform/components/complete-profile-dialog/complete-profile-dialog.component';
 
 @Component({
   selector: 'app-platform-layout',
@@ -38,8 +42,18 @@ import { USER_ROLES } from '../../core/auth/roles';
             {{ 'landing.cta_own_business' | translate }}
           </a>
           @if (auth.isAuthenticated()) {
-            <a mat-flat-button routerLink="/app" (click)="snav.close()">
-              {{ 'landing.go_dashboard' | translate }}
+            @if (isOwner()) {
+              <a mat-flat-button routerLink="/app/owner" (click)="snav.close()">
+                {{ 'landing.go_owner_dashboard' | translate }}
+              </a>
+            }
+            @if (isProfessional()) {
+              <a mat-flat-button routerLink="/app/professional" (click)="snav.close()">
+                {{ 'landing.go_professional_dashboard' | translate }}
+              </a>
+            }
+            <a mat-stroked-button routerLink="/app/client" (click)="snav.close()">
+              {{ 'landing.go_client_dashboard' | translate }}
             </a>
           } @else {
             <button mat-stroked-button (click)="login(); snav.close()">
@@ -88,9 +102,21 @@ import { USER_ROLES } from '../../core/auth/roles';
             <div class="platform__actions">
               <app-locale-switcher />
               @if (auth.isAuthenticated()) {
-                <button mat-flat-button routerLink="/app" class="platform__cta" (click)="goDashboard()">
-                  <mat-icon>space_dashboard</mat-icon>
-                  <span>{{ 'landing.go_dashboard' | translate }}</span>
+                @if (isOwner()) {
+                  <button mat-flat-button routerLink="/app/owner" class="platform__cta">
+                    <mat-icon>storefront</mat-icon>
+                    <span>{{ 'landing.go_owner_dashboard' | translate }}</span>
+                  </button>
+                }
+                @if (isProfessional()) {
+                  <button mat-stroked-button routerLink="/app/professional" class="platform__cta">
+                    <mat-icon>work</mat-icon>
+                    <span>{{ 'landing.go_professional_dashboard' | translate }}</span>
+                  </button>
+                }
+                <button mat-stroked-button routerLink="/app/client" class="platform__cta">
+                  <mat-icon>person</mat-icon>
+                  <span>{{ 'landing.go_client_dashboard' | translate }}</span>
                 </button>
               } @else {
                 <button mat-flat-button class="platform__cta" (click)="login()">
@@ -116,8 +142,9 @@ import { USER_ROLES } from '../../core/auth/roles';
             </div>
             <div class="platform__footer-meta">
               <span>{{ 'footer.rights' | translate }}</span>
-              <a>{{ 'footer.privacy' | translate }}</a>
-              <a>{{ 'footer.habeas' | translate }}</a>
+              <a class="platform__footer-link" routerLink="/privacidad">
+                {{ 'common.appName' | translate }} — {{ 'footer.privacy_full' | translate }}
+              </a>
             </div>
           </div>
         </footer>
@@ -235,6 +262,13 @@ import { USER_ROLES } from '../../core/auth/roles';
       font-size: 13px;
       align-items: flex-end;
     }
+    .platform__footer-link {
+      color: var(--mat-sys-primary);
+      text-decoration: none;
+    }
+    .platform__footer-link:hover {
+      text-decoration: underline;
+    }
 
     @media (max-width: 860px) {
       .platform__menu {
@@ -256,14 +290,72 @@ import { USER_ROLES } from '../../core/auth/roles';
 export class PlatformLayout {
   protected readonly auth = inject(AuthService);
   private readonly router = inject(Router);
+  private readonly dialog = inject(MatDialog);
+  private readonly platform = inject(PlatformService);
+  private readonly dashboard = inject(DashboardService);
+  private profileChecked = false;
+  private membershipsLoaded = false;
+
+  /** El usuario es dueño de al menos un negocio (ve el panel de empresa). */
+  protected readonly isOwner = signal(false);
+  /** El usuario trabaja como profesional en algún negocio (ve su panel de agenda). */
+  protected readonly isProfessional = signal(false);
+
+  constructor() {
+    // Las membresías se resuelven al autenticarse y se ocultan para clientes puros.
+    effect(() => {
+      if (!this.auth.isAuthenticated()) {
+        this.membershipsLoaded = false;
+        this.isOwner.set(false);
+        this.isProfessional.set(false);
+        return;
+      }
+      if (this.membershipsLoaded) return;
+      this.membershipsLoaded = true;
+      this.dashboard.myTenants().subscribe({
+        next: (list) => {
+          this.isOwner.set(list.some((m) => m.roles.includes(BUSINESS_ROLES.OWNER)));
+          this.isProfessional.set(
+            list.some((m) => m.roles.includes(BUSINESS_ROLES.PROFESSIONAL)),
+          );
+        },
+        error: () => {
+          this.membershipsLoaded = false;
+        },
+      });
+    });
+
+    // Cuando el usuario se autentica (incl. justo después de registrarse en la
+    // misma sesión) verificamos si completó teléfono + ciudad. Si no, se le pide:
+    // guardar su perfil dispara el envío del mensaje de bienvenida por WhatsApp.
+    // Reacciona al cambio de sesión (effect sobre el signal), no solo al primer
+    // render, para cubrir el registro/login posterior al cargado de la SPA.
+    effect(() => {
+      if (typeof window === 'undefined') return; // no abrir diálogos en SSR
+      if (!this.auth.isAuthenticated()) return;
+      if (this.profileChecked) return; // una sola vez por sesión
+      this.profileChecked = true;
+      this.checkProfile();
+    });
+  }
+
+  private checkProfile(): void {
+    this.platform.meProfile().subscribe({
+      next: (profile) => {
+        // Tras el registro pedimos teléfono + ciudad (habilita el WhatsApp de ReservaYa).
+        if (!profile?.phone || !profile?.city) {
+          this.dialog.open(CompleteProfileDialog, { width: '460px', maxWidth: '92vw' });
+        }
+      },
+      error: () => {
+        // Si el perfil no es consultable (sesión caducada), no bloqueamos la navegación.
+      },
+    });
+  }
 
   protected login(): void {
     void this.auth.login().subscribe((ok) => {
       if (ok) void this.router.navigateByUrl('/');
     });
-  }
-
-  protected goDashboard(): void {
-    void this.router.navigateByUrl('/app');
   }
 }

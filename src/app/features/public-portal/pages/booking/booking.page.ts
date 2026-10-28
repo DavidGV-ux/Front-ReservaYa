@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, PLATFORM_ID, signal } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   FormControl,
   FormGroup,
@@ -16,15 +17,23 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
-import { TenantService } from '../../services/tenant.service';
+import { AuthService } from '../../../../core/auth/auth.service';
+import { TenantService, tenantSlugFromSnapshot } from '../../services/tenant.service';
 import { PortalDataService } from '../../services/portal-data.service';
 import { AvailabilityService, SlotView } from '../../services/availability.service';
 import { BookingService } from '../../services/booking.service';
-import { Professional, Service } from '../../../../shared/models/domain.model';
+import { PaymentSessionService, PaymentSessionResult } from '../../services/payment-session.service';
+import { WompiCheckoutService } from '../../services/wompi-checkout.service';
+import { Appointment, Professional, Service } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { BookingIntent } from '../../../../core/http/api-mappers';
 
 interface SelectionEvent<T> {
   value: T;
+}
+
+interface WompiCheckoutResult {
+  transaction?: { status?: string };
 }
 
 @Component({
@@ -42,6 +51,7 @@ interface SelectionEvent<T> {
     MatSnackBarModule,
     TranslatePipe,
     MoneyPipe,
+    RouterLink,
   ],
   template: `
     <div class="booking">
@@ -170,6 +180,25 @@ interface SelectionEvent<T> {
               }
             </mat-form-field>
 
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'booking.contact_document' | translate }}</mat-label>
+              <input matInput formControlName="documentId" autocomplete="off" placeholder="CC / TI / CE" />
+              <mat-hint>{{ 'booking.contact_document_hint' | translate }}</mat-hint>
+            </mat-form-field>
+
+            @if (!authenticated()) {
+              <div class="booking-form__register">
+                <mat-icon>account_circle</mat-icon>
+                <span>
+                  <strong>{{ 'booking.register_prompt_title' | translate }}</strong>
+                  {{ 'booking.register_prompt' | translate }}
+                  <a class="booking-form__register-link" [routerLink]="['/crear-negocio']">
+                    {{ 'booking.register_here' | translate }}
+                  </a>
+                </span>
+              </div>
+            }
+
             <div class="booking-form__habeas">
               <mat-checkbox formControlName="habeasData" color="primary">
                 <strong>{{ 'booking.habeas_label' | translate }}</strong>
@@ -226,16 +255,37 @@ interface SelectionEvent<T> {
             <p>{{ 'booking.payment_description' | translate }}</p>
 
             <div class="payment__amount">
-              <span>{{ 'booking.summary_upfront' | translate: { percent: upfrontPercent() } }}</span>
-              <strong>{{ upfrontAmount() | appMoney: tenant()?.currency }}</strong>
+              <span>{{ 'booking.pay_mode' | translate }}</span>
             </div>
+            <mat-radio-group class="payment__modes" (change)="onPaymentMode($event)">
+              <div class="payment__mode">
+                <mat-radio-button value="advance" [checked]="selectedPaymentMode() === 'advance'">
+                  <span>{{ 'booking.pay_advance' | translate }}</span>
+                  <strong>{{ upfrontAmount() | appMoney: tenant()?.currency }}</strong>
+                </mat-radio-button>
+              </div>
+              <div class="payment__mode">
+                <mat-radio-button value="full" [checked]="selectedPaymentMode() === 'full'">
+                  <span>{{ 'booking.pay_full' | translate }}</span>
+                  <strong>{{ fullAmount() | appMoney: tenant()?.currency }}</strong>
+                </mat-radio-button>
+              </div>
+            </mat-radio-group>
+
+            @if (selectedPaymentMode() === 'advance') {
+              <div class="payment__note">
+                <mat-icon>info</mat-icon>
+                <span>
+                  {{ 'booking.payment_commission' | translate }}
+                  <br />
+                  <em>{{ 'booking.payment_sandbox' | translate }}</em>
+                </span>
+              </div>
+            }
+
             <div class="payment__note">
-              <mat-icon>info</mat-icon>
-              <span>
-                {{ 'booking.payment_commission' | translate }}
-                <br />
-                <em>{{ 'booking.payment_sandbox' | translate }}</em>
-              </span>
+              <mat-icon>lock</mat-icon>
+              <span>{{ 'booking.widget_notice' | translate }}</span>
             </div>
 
             @if (paymentDone()) {
@@ -333,6 +383,32 @@ interface SelectionEvent<T> {
       @media (min-width: 640px) {
         grid-column: 1 / -1;
       }
+    }
+
+    .booking-form__register {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      padding: 12px 16px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 12px;
+      background: var(--mat-sys-surface-container-low, transparent);
+      font-size: 13px;
+      color: var(--mat-sys-on-surface-variant);
+
+      mat-icon {
+        font-size: 20px;
+        width: 20px;
+        height: 20px;
+        flex: none;
+      }
+    }
+
+    .booking-form__register-link {
+      font-weight: 600;
+      color: var(--mat-sys-primary);
+      cursor: pointer;
     }
 
     .booking-form__habeas {
@@ -456,6 +532,30 @@ interface SelectionEvent<T> {
       }
     }
 
+    .payment__modes {
+      display: grid;
+      gap: 10px;
+      width: 100%;
+      margin-bottom: 16px;
+    }
+
+    .payment__mode {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      border: 1px solid var(--mat-sys-outline-variant);
+      border-radius: 12px;
+
+      span {
+        margin-right: 8px;
+      }
+
+      strong {
+        color: var(--mat-sys-primary);
+      }
+    }
+
     .payment__note {
       display: flex;
       gap: 10px;
@@ -489,8 +589,11 @@ export class BookingPage implements OnInit {
   private readonly data = inject(PortalDataService);
   private readonly availability = inject(AvailabilityService);
   private readonly booking = inject(BookingService);
+  private readonly payments = inject(PaymentSessionService);
+  private readonly checkout = inject(WompiCheckoutService);
   private readonly snackbar = inject(MatSnackBar);
   private readonly translate = inject(TranslateService);
+  private readonly auth = inject(AuthService);
 
   protected readonly tenant = this.tenants.currentTenant;
 
@@ -504,6 +607,9 @@ export class BookingPage implements OnInit {
   private readonly selSlot = signal<SlotView | null>(null);
   private readonly paying = signal(false);
   private readonly payDone = signal(false);
+  private readonly payMode = signal<'advance' | 'full'>('advance');
+
+  protected readonly selectedPaymentMode = this.payMode.asReadonly();
 
   protected readonly services = this.servicesList.asReadonly();
   protected readonly professionals = this.professionalsList.asReadonly();
@@ -520,8 +626,14 @@ export class BookingPage implements OnInit {
     name: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
     phone: new FormControl('', { nonNullable: true, validators: [Validators.required, Validators.minLength(7)] }),
     email: new FormControl('', { validators: [Validators.email] }),
+    documentId: new FormControl(''),
     habeasData: new FormControl(false, { nonNullable: true, validators: [Validators.requiredTrue] }),
   });
+
+  protected readonly authenticated = signal(this.auth.isAuthenticated());
+
+  private readonly platformId = inject(PLATFORM_ID);
+  private leftToConfirmation = false;
 
   protected readonly serviceDone = computed(
     () => this.selService() !== null && this.selProfessional() !== null,
@@ -536,9 +648,11 @@ export class BookingPage implements OnInit {
     if (!service) return 0;
     return Math.round((service.price * this.upfrontPercent()) / 100);
   });
+  protected readonly fullAmount = computed(() => this.selService()?.price ?? 0);
 
   ngOnInit(): void {
-    const slug = this.route.snapshot.paramMap.get('tenantSlug') ?? 'barber-estilo';
+    const slug = tenantSlugFromSnapshot(this.route.snapshot);
+    if (!slug) return;
     this.tenants.resolve(slug).subscribe((tenant) => {
       this.data.services(tenant.tenantId).subscribe((s) => this.servicesList.set(s));
 
@@ -609,6 +723,10 @@ export class BookingPage implements OnInit {
     return new Intl.DateTimeFormat(this.locale(), { hour: '2-digit', minute: '2-digit' }).format(time);
   }
 
+  protected onPaymentMode(event: SelectionEvent<string>): void {
+    this.payMode.set(event.value === 'full' ? 'full' : 'advance');
+  }
+
   pay(): void {
     const service = this.selService();
     const professional = this.selProfessional();
@@ -629,32 +747,103 @@ export class BookingPage implements OnInit {
           name: this.contactForm.controls['name'].value,
           phone: this.contactForm.controls['phone'].value,
           email: this.contactForm.controls['email'].value || undefined,
+          documentId: this.contactForm.controls['documentId'].value || undefined,
           habeasDataConsent: true,
           habeasDataConsentAt: new Date().toISOString(),
         },
         source: 'web',
       })
       .subscribe({
-        next: (appointment) => {
-          this.booking.approvePayment(appointment).subscribe({
-            next: (confirmed) => {
-              this.paying.set(false);
-              this.payDone.set(true);
-              void this.router.navigate(['/', tenant.slug, 'confirmacion'], {
-                queryParams: { ref: confirmed.id },
-              });
-            },
-            error: () => {
-              this.paying.set(false);
-              this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
-            },
-          });
-        },
+        next: (appointment) => this.handlePaySuccess(appointment),
         error: () => {
           this.paying.set(false);
           this.slotConflict();
         },
       });
+  }
+
+  private handlePaySuccess(appointment: Appointment): void {
+    const tenant = this.tenant();
+    if (!tenant) return;
+    const intent = this.booking.paymentIntent();
+    const mode = this.payMode();
+    if (mode === 'advance' || !intent) {
+      this.payWith(appointment, intent);
+      return;
+    }
+    this.payments.create(tenant.tenantId, appointment.id, 'full').subscribe({
+      next: (session) => this.payWith(appointment, session.intent, session),
+      error: () => this.payWith(appointment, intent),
+    });
+  }
+
+  private payWith(
+    appointment: Appointment,
+    intent: BookingIntent | null,
+    session?: PaymentSessionResult,
+  ): void {
+    if (!intent) {
+      this.paying.set(false);
+      this.slotConflict();
+      return;
+    }
+    if (intent.chargeMode === 'hosted' && intent.publicKey && intent.signatureIntegrity) {
+      this.openCheckout(appointment, intent);
+    } else {
+      this.approveDemo(appointment, session);
+    }
+  }
+
+  private approveDemo(appointment: Appointment, session?: PaymentSessionResult): void {
+    this.booking
+      .approvePayment(
+        appointment,
+        session
+          ? {
+              reference: session.paymentReference,
+              amount: session.amount,
+              currency: session.currency,
+            }
+          : undefined,
+      )
+      .subscribe({
+        next: (confirmed) => {
+          this.paying.set(false);
+          this.payDone.set(true);
+          const tenant = this.tenant();
+          void this.router.navigate(['/', tenant?.slug, 'confirmacion'], {
+            queryParams: { ref: confirmed.id },
+          });
+        },
+        error: () => {
+          this.paying.set(false);
+          this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
+        },
+      });
+  }
+
+  private openCheckout(appointment: Appointment, intent: BookingIntent): void {
+    if (!isPlatformBrowser(this.platformId)) return;
+    const tenant = this.tenant();
+    const ref = appointment.id;
+    this.paying.set(false);
+    this.checkout.open(intent).subscribe({
+      next: (result) => this.onWidgetResult(result, tenant?.slug, ref),
+      error: () => {
+        this.snackbar.open('common.error', 'OK', { panelClass: 'app-error' });
+      },
+    });
+  }
+
+  private onWidgetResult(result: WompiCheckoutResult, slug: string | undefined, ref: string): void {
+    const status = result.transaction?.status;
+    if (status === 'APPROVED' && !this.leftToConfirmation) {
+      this.leftToConfirmation = true;
+      this.payDone.set(true);
+      void this.router.navigate(['/', slug, 'confirmacion'], { queryParams: { ref } });
+    } else if (status) {
+      this.snackbar.open('booking.payment_failed_widget', 'OK', { panelClass: 'app-error' });
+    }
   }
 
   private applyService(service: Service): void {
