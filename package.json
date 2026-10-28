@@ -41,10 +41,12 @@
     "@ngx-translate/core": "^18.0.0",
     "@ngx-translate/http-loader": "^18.0.0",
     "angular-oauth2-oidc": "^21.0.3",
+    "bootstrap": "^5.3.8",
     "country-state-city": "^3.2.1",
     "express": "^5.1.0",
     "libphonenumber-js": "^1.13.14",
     "rxjs": "~7.8.0",
+    "sweetalert2": "^11.26.25",
     "tslib": "^2.3.0"
   },
   "devDependencies": {

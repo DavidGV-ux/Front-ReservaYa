@@ -41,6 +41,10 @@ import {
           <a mat-stroked-button size="large" routerLink="/" fragment="negocios">
             {{ 'landing.browse_services' | translate }}
           </a>
+          <a mat-flat-button size="large" routerLink="/crear-cuenta" class="hero__register">
+            <mat-icon>person_add</mat-icon>
+            {{ 'landing.cta_register' | translate }}
+          </a>
         </div>
         <dl class="hero__stats">
           <div class="hero__stat">
