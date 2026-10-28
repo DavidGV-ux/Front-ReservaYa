@@ -9,7 +9,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService, OwnerAppointmentRow } from '../../../dashboard/services/dashboard.service';
-import { Professional, Tenant } from '../../../../shared/models/domain.model';
+import { Professional, Tenant, Currency } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
 type Action = 'completed' | 'no_show' | 'cancel';
@@ -142,20 +142,20 @@ const STATUSES: readonly StatusValue[] = [
               </td>
             </ng-container>
             <ng-container matColumnDef="advance">
-              <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.advance' | translate }}</th>
+              <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.paid_label' | translate }}</th>
               <td mat-cell *matCellDef="let row" class="citas__paid-col">
                 {{ row.paidAmount | appMoney: row.currency }}
                 <span class="citas__pay-state citas__pay-state--{{
                   row.appointment.paymentStatus
                 }}">
-                  {{ 'history.pay_' + row.appointment.paymentStatus | translate }}
+                  {{ payLabel(row) }}
                 </span>
               </td>
             </ng-container>
             <ng-container matColumnDef="due">
               <th mat-header-cell *matHeaderCellDef>{{ 'owner.citas.due_label' | translate }}</th>
               <td mat-cell *matCellDef="let row" class="citas__due-col">
-                {{ row.dueAmount | appMoney: row.currency }}
+                {{ dueText(row) }}
               </td>
             </ng-container>
             <ng-container matColumnDef="status">
@@ -375,6 +375,7 @@ export class OwnerAppointmentsPage implements OnInit {
 
   private readonly dashboard = inject(DashboardService);
   private readonly translate = inject(TranslateService);
+  private readonly moneyPipe = inject(MoneyPipe);
 
   protected readonly cols = ['client', 'professional', 'service', 'when', 'value', 'advance', 'due', 'status', 'actions'];
 
@@ -453,6 +454,21 @@ export class OwnerAppointmentsPage implements OnInit {
   protected professionalName(professionalId: string): string {
     const name = this.professionalsSignal().find((p) => p.id === professionalId)?.name;
     return name ?? '—';
+  }
+
+  protected dueText(row: OwnerAppointmentRow): string {
+    return row.dueAmount > 0 ? this.moneyPipe.transform(row.dueAmount, row.currency as Currency) : '—';
+  }
+
+  protected payLabel(row: OwnerAppointmentRow): string {
+    if (
+      row.appointment.paymentStatus === 'approved' &&
+      row.paidAmount > 0 &&
+      row.paidAmount >= row.appointment.serviceSnapshot.price
+    ) {
+      return this.translate.instant('history.pay_approved_full');
+    }
+    return this.translate.instant('history.pay_' + row.appointment.paymentStatus);
   }
 
   protected clearSearch(input: HTMLInputElement): void {

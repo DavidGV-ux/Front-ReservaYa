@@ -30,6 +30,11 @@ export const routes: Routes = [
             (m) => m.PrivacyPolicyPage,
           ),
       },
+      {
+        path: 'crear-cuenta',
+        loadComponent: () =>
+          import('./features/auth/pages/register/register.page').then((m) => m.RegisterPage),
+      },
     ],
   },
   {
@@ -85,16 +90,25 @@ export const routes: Routes = [
       },
       {
         path: 'professional',
-        canActivate: [requireRoles([USER_ROLES.PROFESSIONAL, USER_ROLES.OWNER])],
+        canActivate: [requireRoles([USER_ROLES.PROFESSIONAL])],
         loadComponent: () =>
           import('./features/professional/pages/my-schedule/my-schedule.page').then((m) => m.MySchedulePage),
       },
       {
         path: 'client',
+        pathMatch: 'full',
         canActivate: [requireAuth()],
         loadComponent: () =>
           import('./features/client/pages/my-appointments/my-appointments.page').then(
             (m) => m.ClientMyAppointmentsPage,
+          ),
+      },
+      {
+        path: 'client/pagos',
+        canActivate: [requireAuth()],
+        loadComponent: () =>
+          import('./features/client/pages/payments/payments.page').then(
+            (m) => m.ClientPaymentsPage,
           ),
       },
       {
