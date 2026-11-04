@@ -63,6 +63,13 @@ describe('estimateCancellation', () => {
     expect(e.refundAmount).toBe(30_000);
   });
 
+  it('profesional: cancela en nombre del negocio con reembolso completo', () => {
+    const e = estimateCancellation(appt({ startTime: hoursFromNow(2) }), tenant, 'professional', NOW);
+    expect(e.policy).toBe('tenant_cancelled');
+    expect(e.withinWindow).toBe(true);
+    expect(e.refundAmount).toBe(30_000);
+  });
+
   it('sin pago aprobado no hay nada que reembolsar', () => {
     const e = estimateCancellation(appt({ paymentStatus: 'pending' }), tenant, 'client', NOW);
     expect(e.advancePaid).toBe(0);

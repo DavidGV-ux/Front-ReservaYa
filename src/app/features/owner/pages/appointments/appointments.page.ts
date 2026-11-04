@@ -7,9 +7,16 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService, OwnerAppointmentRow } from '../../../dashboard/services/dashboard.service';
-import { Professional, Tenant, Currency } from '../../../../shared/models/domain.model';
+import {
+  CancelAppointmentDialog,
+  CancelAppointmentDialogData,
+  cancellationMessage,
+} from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
+import { Appointment, Professional, Tenant, Currency } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 
 type Action = 'completed' | 'no_show' | 'cancel';
@@ -36,6 +43,8 @@ const STATUSES: readonly StatusValue[] = [
     MatFormFieldModule,
     MatInputModule,
     MatSelectModule,
+    MatDialogModule,
+    MatSnackBarModule,
     TranslatePipe,
     MoneyPipe,
   ],
@@ -376,6 +385,8 @@ export class OwnerAppointmentsPage implements OnInit {
   private readonly dashboard = inject(DashboardService);
   private readonly translate = inject(TranslateService);
   private readonly moneyPipe = inject(MoneyPipe);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackbar = inject(MatSnackBar);
 
   protected readonly cols = ['client', 'professional', 'service', 'when', 'value', 'advance', 'due', 'status', 'actions'];
 
@@ -499,16 +510,36 @@ export class OwnerAppointmentsPage implements OnInit {
     };
 
     if (action === 'cancel') {
-      this.dashboard.cancelOwnerAppointment(tenantId, appt.id).subscribe({
-        next: (updated) => done('cancelled', updated.version),
-        error: () => this.busySignal.set(null),
-      });
+      // La cancelación pasa por el diálogo con la política del negocio y el reembolso estimado.
+      this.busySignal.set(null);
+      this.openCancelDialog(row);
       return;
     }
     this.dashboard.ownerSetAppointmentStatus(tenantId, appt.id, action, appt.version).subscribe({
       next: (updated) => done(updated.appointment.status, updated.appointment.version),
       error: () => this.busySignal.set(null),
     });
+  }
+
+  private openCancelDialog(row: OwnerAppointmentRow): void {
+    const data: CancelAppointmentDialogData = { appointment: row.appointment, tenant: this.tenant(), by: 'owner' };
+    this.dialog
+      .open<CancelAppointmentDialog, CancelAppointmentDialogData, Appointment>(CancelAppointmentDialog, {
+        data,
+        width: '480px',
+        autoFocus: 'dialog',
+      })
+      .afterClosed()
+      .subscribe((cancelled) => {
+        if (!cancelled) return;
+        this.rowsSignal.update((rows) =>
+          rows.map((r) => (r.appointment.id === cancelled.id ? { ...r, appointment: cancelled } : r)),
+        );
+        this.snackbar.open(cancellationMessage(this.translate, cancelled), 'OK', {
+          duration: 5000,
+          panelClass: 'app-ok',
+        });
+      });
   }
 
   protected dateTime(iso: string): string {

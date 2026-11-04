@@ -4,10 +4,18 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
 import { MatListModule } from '@angular/material/list';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { TranslatePipe, TranslateService } from '@ngx-translate/core';
 import { DashboardService } from '../../../dashboard/services/dashboard.service';
+import {
+  CancelAppointmentDialog,
+  CancelAppointmentDialogData,
+  cancellationMessage,
+} from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
+import { isCancellable } from '../../../../shared/utils/cancellation-policy';
 
 @Component({
   selector: 'app-my-schedule',
@@ -17,6 +25,8 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
     MatIconModule,
     MatListModule,
     MatButtonModule,
+    MatDialogModule,
+    MatSnackBarModule,
     TranslatePipe,
     MoneyPipe,
   ],
@@ -61,10 +71,24 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
                   {{ appointment.clientInfo.name }} · {{ appointment.serviceSnapshot.name }}
                   · {{ appointment.serviceSnapshot.price | appMoney }}
                 </span>
-                <span matListItemMeta>
-                  <button mat-stroked-button (click)="toggleStatus(appointment)">
-                    {{ appointment.status === 'completed' ? 'Completed' : 'Done' }}
-                  </button>
+                <span matListItemMeta class="schedule__meta">
+                  @if (appointment.status === 'cancelled') {
+                    <span class="schedule__cancelled">{{ 'history.status_cancelled' | translate }}</span>
+                  } @else {
+                    <button mat-stroked-button (click)="toggleStatus(appointment)">
+                      {{ appointment.status === 'completed' ? 'Completed' : 'Done' }}
+                    </button>
+                    @if (canCancel(appointment)) {
+                      <button
+                        mat-stroked-button
+                        class="schedule__cancel"
+                        [attr.aria-label]="('dashboard.cancel' | translate) + ': ' + appointment.clientInfo.name"
+                        (click)="cancel(appointment)"
+                      >
+                        {{ 'dashboard.cancel' | translate }}
+                      </button>
+                    }
+                  }
                 </span>
               </mat-list-item>
             } @empty {
@@ -156,6 +180,26 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
       }
     }
 
+    .schedule__meta {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .schedule__cancel {
+      color: var(--mat-sys-error);
+    }
+
+    .schedule__cancelled {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      background: var(--mat-sys-error-container);
+      color: var(--mat-sys-on-error-container);
+    }
+
     .schedule__actions {
       display: flex;
       justify-content: space-between;
@@ -168,6 +212,8 @@ import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
 export class MySchedulePage implements OnInit {
   private readonly translate = inject(TranslateService);
   private readonly dashboard = inject(DashboardService);
+  private readonly dialog = inject(MatDialog);
+  private readonly snackbar = inject(MatSnackBar);
 
   private readonly business = signal<string | null>(null);
   private readonly notProfessionalFlag = signal(false);
@@ -239,6 +285,30 @@ export class MySchedulePage implements OnInit {
         a.id === appointment.id ? { ...a, status: appointment.status === 'confirmed' ? 'completed' : 'confirmed' } : a,
       ),
     );
+  }
+
+  protected canCancel(appointment: Appointment): boolean {
+    return isCancellable(appointment);
+  }
+
+  /** El profesional cancela en nombre del negocio: el back solo le permite sus propias citas. */
+  protected cancel(appointment: Appointment): void {
+    const data: CancelAppointmentDialogData = { appointment, tenant: null, by: 'professional' };
+    this.dialog
+      .open<CancelAppointmentDialog, CancelAppointmentDialogData, Appointment>(CancelAppointmentDialog, {
+        data,
+        width: '480px',
+        autoFocus: 'dialog',
+      })
+      .afterClosed()
+      .subscribe((cancelled) => {
+        if (!cancelled) return;
+        this.dayAppts.update((list) => list.map((a) => (a.id === cancelled.id ? cancelled : a)));
+        this.snackbar.open(cancellationMessage(this.translate, cancelled), 'OK', {
+          duration: 5000,
+          panelClass: 'app-ok',
+        });
+      });
   }
 
   protected weekday(day: Date): string {
