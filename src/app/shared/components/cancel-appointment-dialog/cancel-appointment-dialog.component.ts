@@ -48,7 +48,7 @@ export const REASON_MAX_LENGTH = 280;
       <div class="cancel__summary">
         <strong>{{ appointment.serviceSnapshot.name }}</strong>
         <span>{{ when() }}</span>
-        @if (data.by === 'owner') {
+        @if (data.by !== 'client') {
           <span>{{ 'dashboard.client' | translate }}: {{ appointment.clientInfo.name }}</span>
         }
       </div>
@@ -232,7 +232,8 @@ export class CancelAppointmentDialog {
   protected readonly errorKey = signal<string | null>(null);
 
   protected readonly policyKey = computed(() => {
-    if (this.data.by === 'owner') return 'cancel.policy_owner';
+    // Owner y profesional cancelan en nombre del negocio: siempre reembolso completo.
+    if (this.data.by !== 'client') return 'cancel.policy_owner';
     return this.estimate.withinWindow ? 'cancel.policy_within' : 'cancel.policy_outside';
   });
 
@@ -262,6 +263,19 @@ export class CancelAppointmentDialog {
       },
     });
   }
+}
+
+/** "Cita cancelada. Reembolso de $X en proceso", según la cancelación que devolvió el back. */
+export function cancellationMessage(translate: TranslateService, cancelled: Appointment): string {
+  const ok = translate.instant('dashboard.cancelled_ok');
+  const c = cancelled.cancellation;
+  if (!c) return ok;
+  const amount = new Intl.NumberFormat(translate.getCurrentLang() === 'en' ? 'en-US' : 'es-CO', {
+    style: 'currency',
+    currency: cancelled.serviceSnapshot.currency,
+    maximumFractionDigits: 0,
+  }).format(c.refundAmount);
+  return `${ok} ${translate.instant('cancel.refund_' + c.refundStatus, { amount })}`;
 }
 
 /** Traduce la respuesta de error del back a una clave de i18n. */

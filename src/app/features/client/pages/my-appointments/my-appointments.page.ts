@@ -11,6 +11,7 @@ import { TenantMembership } from '../../../../core/http/api-mappers';
 import {
   CancelAppointmentDialog,
   CancelAppointmentDialogData,
+  cancellationMessage,
 } from '../../../../shared/components/cancel-appointment-dialog/cancel-appointment-dialog.component';
 import { Appointment } from '../../../../shared/models/domain.model';
 import { MoneyPipe } from '../../../../shared/pipes/money.pipe';
@@ -311,24 +312,11 @@ export class ClientMyAppointmentsPage implements OnInit {
         if (!cancelled) return;
         // La lista solo muestra citas activas: la cancelada sale de la vista.
         this.upcoming.update((list) => list.filter((a) => a.id !== cancelled.id));
-        this.snackbar.open(this.cancelledMessage(cancelled), 'OK', {
+        this.snackbar.open(cancellationMessage(this.translate, cancelled), 'OK', {
           duration: 5000,
           panelClass: 'app-ok',
         });
       });
-  }
-
-  /** "Cita cancelada. Reembolso de $X en proceso" según lo que respondió el back. */
-  private cancelledMessage(cancelled: Appointment): string {
-    const ok = this.translate.instant('dashboard.cancelled_ok');
-    const c = cancelled.cancellation;
-    if (!c) return ok;
-    const amount = new Intl.NumberFormat(this.locale(), {
-      style: 'currency',
-      currency: cancelled.serviceSnapshot.currency,
-      maximumFractionDigits: 0,
-    }).format(c.refundAmount);
-    return `${ok} ${this.translate.instant('cancel.refund_' + c.refundStatus, { amount })}`;
   }
 
   protected date(iso: string): string {

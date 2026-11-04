@@ -21,7 +21,7 @@ import {
 import { buildMockCancellation, estimateCancellation } from '../../../shared/utils/cancellation-policy';
 
 /** Quién cancela desde el front; el back solo expone rutas para cliente (público) y owner. */
-export type CancelActor = 'client' | 'owner';
+export type CancelActor = 'client' | 'owner' | 'professional';
 
 export interface BookingRequest {
   tenantId: string;
@@ -186,23 +186,18 @@ export class BookingService {
   }
 
   /**
-   * Cancela una cita. El cliente usa la ruta pública y el owner la suya
-   * (el back aplica reembolso completo cuando cancela el negocio).
+   * Cancela una cita. El cliente usa la ruta pública, y el owner y el profesional las suyas
+   * (el back aplica reembolso completo cuando cancela el negocio; el profesional solo puede
+   * cancelar sus propias citas).
    */
   cancel(appointment: Appointment, by: CancelActor, reason?: string): Observable<Appointment> {
     const body = reason?.trim() ? { reason: reason.trim() } : {};
     if (!environment.useMockBackend) {
+      const { tenantId, id } = appointment;
       const request =
-        by === 'owner'
-          ? this.api.post<BackendAppointment>(
-              `/owner/${appointment.tenantId}/appointments/${appointment.id}/cancel`,
-              body,
-              appointment.tenantId,
-            )
-          : this.api.post<BackendAppointment>(
-              `/public/${appointment.tenantId}/appointments/${appointment.id}/cancel`,
-              body,
-            );
+        by === 'client'
+          ? this.api.post<BackendAppointment>(`/public/${tenantId}/appointments/${id}/cancel`, body)
+          : this.api.post<BackendAppointment>(`/${by}/${tenantId}/appointments/${id}/cancel`, body, tenantId);
       return request.pipe(map(mapAppointment));
     }
 
