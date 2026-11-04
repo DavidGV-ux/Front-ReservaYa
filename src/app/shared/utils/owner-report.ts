@@ -16,8 +16,8 @@ export interface ReportDay {
 }
 
 /**
- * Contrato propuesto para `GET /owner/:tenantId/reports?from=&to=` (pendiente en el back).
- * Mientras no exista, el front lo arma con `buildOwnerReport` a partir del ledger.
+ * Contrato de `GET /owner/:tenantId/reports?from=&to=` (back: domain/rules/report-rules.ts).
+ * En modo mock el front lo arma con `buildOwnerReport` a partir del ledger de prueba.
  */
 export interface OwnerReport {
   from: string;

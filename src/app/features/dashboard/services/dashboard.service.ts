@@ -18,7 +18,7 @@ export const ACTIVE_TENANT_KEY = 'reserwaya.activeTenant';
 import { MOCK_APPOINTMENTS } from '../../../shared/mocks/dashboard.mock';
 import { MOCK_PROFESSIONALS, MOCK_SERVICES, MOCK_TENANT } from '../../../shared/mocks/tenant.mock';
 import { Appointment, LedgerEntry, Professional, Service, Tenant, WeeklySchedule } from '../../../shared/models/domain.model';
-import { buildOwnerReport, OwnerReport } from '../../../shared/utils/owner-report';
+import { buildOwnerReport, dayKey, OwnerReport } from '../../../shared/utils/owner-report';
 
 export interface OwnerOverview {
   tenant: Tenant;
@@ -284,11 +284,9 @@ export class DashboardService {
   }
 
   /**
-   * Reporte de ingresos/comisión del owner para un rango de fechas.
-   *
-   * TODO(I3): cuando el back exponga `GET /owner/:tenantId/reports?from=&to=` (contrato en
-   * shared/utils/owner-report.ts), reemplazar el respaldo por esa llamada. Mientras tanto se
-   * calcula con los últimos movimientos que devuelve `/overview`, por eso se marca `partial`.
+   * Reporte de ingresos, comisión y reembolsos del owner para un rango de días.
+   * Usa `GET /owner/:tenantId/reports`, que calcula con todos los asientos del ledger
+   * del rango en la zona horaria del negocio (los días viajan como YYYY-MM-DD).
    */
   ownerReport(tenantId: string, from: Date, to: Date): Observable<OwnerReport> {
     if (environment.useMockBackend) {
@@ -302,18 +300,8 @@ export class DashboardService {
         }),
       );
     }
-    return this.ownerOverview(tenantId).pipe(
-      map((o) =>
-        buildOwnerReport({
-          movements: o.movements,
-          appointments: null,
-          from,
-          to,
-          currency: o.tenant.currency,
-          partial: true,
-        }),
-      ),
-    );
+    const qs = `from=${encodeURIComponent(dayKey(from))}&to=${encodeURIComponent(dayKey(to))}`;
+    return this.api.get<OwnerReport>(`/owner/${tenantId}/reports?${qs}`, tenantId);
   }
 
   ownerServices(tenantId: string): Observable<Service[]> {
